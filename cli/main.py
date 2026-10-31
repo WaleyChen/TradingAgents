@@ -21,6 +21,13 @@ from rich.text import Text
 
 from cli.announcements import display_announcements, fetch_announcements
 from cli.stats_handler import StatsCallbackHandler
+from cli.usage_report import (
+    build_usage_rows,
+    load_pricing_overrides,
+    render_usage_table,
+    unpriced_models,
+    usage_enabled,
+)
 from cli.utils import (
     ask_anthropic_effort,
     ask_gemini_thinking_config,
@@ -1001,7 +1008,39 @@ def _build_run_config(selections: dict, checkpoint: bool | None) -> dict:
     return config
 
 
-def run_analysis(checkpoint: bool | None = None):
+def _print_usage_report(stats_handler: StatsCallbackHandler) -> None:
+    """Print the per-model token/cost breakdown for the finished run."""
+    by_model = stats_handler.get_model_usage()
+    if not by_model:
+        console.print(
+            "[dim]No token usage reported — the provider did not return usage metadata.[/dim]"
+        )
+        return
+
+    try:
+        overrides = load_pricing_overrides()
+    except ValueError as exc:
+        console.print(f"[yellow]{exc}[/yellow]")
+        overrides = {}
+
+    rows, total = build_usage_rows(by_model, overrides)
+    console.print()
+    console.print(render_usage_table(rows, total))
+
+    missing = unpriced_models(rows)
+    if missing:
+        console.print(
+            f"[dim]No built-in rates for: {', '.join(missing)}. "
+            "Set TRADINGAGENTS_MODEL_PRICING='{\"model-id\": [in_per_mtok, out_per_mtok]}' "
+            "to include them.[/dim]"
+        )
+    console.print(
+        "[dim]Estimate only — rates recorded 2026-06-24; verify against your provider's "
+        "current pricing.[/dim]"
+    )
+
+
+def run_analysis(checkpoint: bool | None = None, show_usage: bool | None = None):
     # First get all user selections
     selections = get_user_selections()
 
@@ -1257,6 +1296,9 @@ def run_analysis(checkpoint: bool | None = None):
     console.print("\n[bold cyan]Analysis Complete![/bold cyan]\n")
     console.print(f"[dim]{analyst_wall_time_tracker.format_summary()}[/dim]")
 
+    if usage_enabled(show_usage):
+        _print_usage_report(stats_handler)
+
     # Prompt to save report
     save_choice = typer.prompt("Save report?", default="Y").strip().upper()
     if save_choice in ("Y", "YES", ""):
@@ -1293,13 +1335,19 @@ def analyze(
         "--clear-checkpoints",
         help="Delete all saved checkpoints before running (force fresh start).",
     ),
+    usage: bool | None = typer.Option(
+        None,
+        "--usage/--no-usage",
+        help="Print a per-model token and estimated-cost breakdown when the run "
+        "finishes. Omit to honor TRADINGAGENTS_SHOW_USAGE.",
+    ),
 ):
     if clear_checkpoints:
         from tradingagents.graph.checkpointer import clear_all_checkpoints
         n = clear_all_checkpoints(DEFAULT_CONFIG["data_cache_dir"])
         console.print(f"[yellow]Cleared {n} checkpoint(s).[/yellow]")
     try:
-        run_analysis(checkpoint=checkpoint)
+        run_analysis(checkpoint=checkpoint, show_usage=usage)
     except _NO_CONSOLE_ERRORS:
         # A terminal with no console buffer cannot host the interactive prompts.
         # Emit one actionable line on stderr instead of a prompt_toolkit
