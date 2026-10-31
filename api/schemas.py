@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -12,7 +12,7 @@ AnalystName = Literal["market", "social", "news", "fundamentals"]
 AssetType = Literal["stock", "crypto"]
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     queued = "queued"
     running = "running"
     completed = "completed"
