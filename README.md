@@ -169,6 +169,17 @@ python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more.
 
+### HTTP API (Docker / Rails)
+
+For a deployable service your Rails app can call:
+
+```bash
+tradingagents-api                    # local: http://0.0.0.0:8000
+docker compose up tradingagents-api  # container on port 8000
+```
+
+Submit a job with `POST /api/v1/analyses`, then poll `GET /api/v1/analyses/{id}` until `completed` or `failed`. Set `TRADINGAGENTS_API_KEY` in `.env` before exposing the service. Full contract and a Rails client sketch: [docs/API.md](docs/API.md).
+
 ### Markets and tickers
 
 TradingAgents works with any market Yahoo Finance covers, using the exchange-suffixed ticker. Company identity and the alpha benchmark resolve automatically per market.
