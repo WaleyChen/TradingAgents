@@ -127,3 +127,27 @@ def test_a_malformed_reply_is_retried_but_its_text_is_not_returned():
                   ValueError("bad trigger sk-LEAK"))
     out = _run(llm)
     assert out.plan is None and "sk-LEAK" not in out.error
+
+
+@pytest.mark.unit
+def test_the_prompt_lists_the_triggers_that_are_already_true():
+    from tradingagents.plan.generate import _prompt
+
+    # price 247.19: below the 20 and 50 day averages, above the 200; RSI 39; MACD below zero
+    text = _prompt("decision", "Hold", READINGS, [])
+    assert "Already true now" in text
+    for already in ("sma_20 crosses_below", "close_vs_sma_20 weekly_close_below",
+                    "sma_50 crosses_below", "close_vs_sma_50 weekly_close_below",
+                    "sma_200 crosses_above", "close_vs_sma_200 weekly_close_above",
+                    "macd_histogram crosses_below", "N above 39", "N below 39"):
+        assert already in text
+    assert "sma_200 crosses_below" not in text and "close_vs_sma_200 weekly_close_below" not in text
+
+
+@pytest.mark.unit
+def test_readings_that_are_unavailable_add_nothing_to_the_already_true_list():
+    from tradingagents.plan.check import Readings
+    from tradingagents.plan.generate import _prompt
+
+    text = _prompt("decision", "Hold", Readings(price=10.0), [])
+    assert "sma_" not in text.split("Already true now")[1].split("Final decision")[0]

@@ -71,6 +71,24 @@ def _readings_block(r: Readings) -> str:
     return "\n".join(f"- {name}: {'unavailable' if v is None else v}" for name, v in rows)
 
 
+def _already_true(r: Readings) -> str:
+    """The trigger forms the readings already satisfy: they would fire at once, so they fail the checks."""
+    lines = []
+    for days, average in (("20", r.sma_20), ("50", r.sma_50), ("200", r.sma_200)):
+        if average is None:
+            continue
+        side, other = (("crosses_below", "weekly_close_below") if r.price < average
+                       else ("crosses_above", "weekly_close_above"))
+        if r.price != average:
+            lines.append(f"- sma_{days} {side}; close_vs_sma_{days} {other}")
+    if r.macd_histogram:
+        lines.append(f"- macd_histogram {'crosses_below' if r.macd_histogram < 0 else 'crosses_above'}")
+    if r.rsi_14 is not None:
+        lines.append(f"- rsi_14 below or crosses_below any N above {r.rsi_14:g}; "
+                     f"rsi_14 above or crosses_above any N below {r.rsi_14:g}")
+    return "\n".join(lines) or "- none"
+
+
 def _prompt(decision: str, rating: str, readings: Readings, problems: list[str]) -> str:
     retry = ""
     if problems:
@@ -78,7 +96,9 @@ def _prompt(decision: str, rating: str, readings: Readings, problems: list[str])
         retry = f"\nYour previous plan failed these checks; fix every one:\n{listed}\n"
     return (f"{_RULES}\nRating: {rating}\n\nVerified readings (the only source for prices and "
             f"indicator values; a trigger on an unavailable reading is not allowed):\n"
-            f"{_readings_block(readings)}\n\nFinal decision:\n{decision}\n{retry}\n"
+            f"{_readings_block(readings)}\n\nAlready true now (a trigger of this form would fire "
+            f"at once, so never use it; pick the opposite form or a price level):\n"
+            f"{_already_true(readings)}\n\nFinal decision:\n{decision}\n{retry}\n"
             f"{NO_EXTERNAL_TOOLS}{get_language_instruction()}")
 
 
