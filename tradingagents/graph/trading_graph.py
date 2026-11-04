@@ -332,7 +332,8 @@ class TradingAgentsGraph:
             note = f"Past decisions could not be settled this run ({type(exc).__name__}); they stay pending."
         try:
             past_context = self.memory_log.get_past_context(
-                state["company_of_interest"], as_of=self._memory_as_of(state["trade_date"]))
+                state["company_of_interest"], n_cross=self.config.get("memory_n_cross", 3),
+                as_of=self._memory_as_of(state["trade_date"]))
         except Exception as exc:
             logger.warning("Reading the memory log failed: %s", exc)
             past_context = ""

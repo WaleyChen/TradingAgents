@@ -26,6 +26,7 @@ def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
     config = deepcopy(DEFAULT_CONFIG)
     if "TRADINGAGENTS_STRUCTURED_PLAN" not in os.environ:
         config["structured_plan"] = True  # the API returns a checked plan unless told not to
+    config["memory_n_cross"] = 0  # a customer's report must not draw on other tickers' lessons
 
     if request.max_debate_rounds is not None:
         config["max_debate_rounds"] = request.max_debate_rounds

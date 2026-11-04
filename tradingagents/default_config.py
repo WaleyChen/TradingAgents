@@ -89,6 +89,8 @@ def build_default_config() -> dict:
         # the oldest resolved entries are pruned once this limit is exceeded.
         # Pending entries are never pruned. None disables rotation entirely.
         "memory_log_max_entries": None,
+        # How many lessons from other tickers the Portfolio Manager sees (0 = none).
+        "memory_n_cross": 3,
         # LLM settings
         "llm_provider": "openai",
         "deep_think_llm": "gpt-6-sol",

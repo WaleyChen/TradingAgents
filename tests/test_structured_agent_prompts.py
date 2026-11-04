@@ -18,7 +18,7 @@ import pytest
 import tradingagents.agents.analysts.sentiment_analyst as sentiment
 from tradingagents.agents.managers.portfolio_manager import create_portfolio_manager
 from tradingagents.agents.managers.research_manager import create_research_manager
-from tradingagents.agents.structured import NO_EXTERNAL_TOOLS
+from tradingagents.agents.structured import NO_EXTERNAL_TOOLS, ONE_VOICE
 from tradingagents.agents.trader.trader import create_trader
 
 
@@ -55,6 +55,7 @@ def test_trader_prompt_states_constraint():
         "market_report": "Current price $189.5; ATR 4.2.",
     })
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
+    assert ONE_VOICE in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -76,6 +77,7 @@ def test_research_manager_prompt_states_constraint():
         },
     })
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
+    assert ONE_VOICE in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -104,6 +106,7 @@ def test_portfolio_manager_prompt_states_constraint():
         "trader_investment_plan": "trader plan",
     })
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
+    assert ONE_VOICE in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -166,3 +169,9 @@ def test_the_sentiment_prompt_names_the_subreddits_searched(monkeypatch):
     text = _prompt_text(captured["prompt"])
     assert "r/Bitcoin, r/CryptoCurrency, r/CryptoMarkets" in text
     assert "wallstreetbets" not in text
+
+
+@pytest.mark.unit
+def test_the_one_voice_rule_bans_the_debate_words_that_leaked_into_reports():
+    for word in ("bull case", "bear case", "debate", "rebutted", "aggressive", "conservative"):
+        assert word in ONE_VOICE

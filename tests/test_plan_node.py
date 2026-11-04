@@ -111,3 +111,23 @@ def test_the_api_turns_the_plan_step_on_unless_the_environment_says_otherwise(mo
     assert build_config(_request())["structured_plan"] is True
     monkeypatch.setenv("TRADINGAGENTS_STRUCTURED_PLAN", "0")
     assert build_config(_request())["structured_plan"] is False
+
+
+@pytest.mark.unit
+def test_the_api_keeps_other_tickers_lessons_out_of_a_report():
+    from api.service import build_config
+
+    assert build_config(_request())["memory_n_cross"] == 0
+
+
+@pytest.mark.unit
+def test_no_cross_ticker_lessons_when_none_are_asked_for(tmp_path):
+    from tradingagents.memory import TradingMemoryLog
+
+    log = TradingMemoryLog({"memory_log_path": str(tmp_path / "mem.md")})
+    for ticker in ("NBIS", "AAOI"):
+        log.store_decision(ticker, "2026-01-05", "Rating: Buy\nx")
+        log.update_with_outcome(ticker, "2026-01-05", 0.05, 0.02, 5, f"{ticker} lesson",
+                                resolution_date="2026-01-10")
+    context = log.get_past_context("AAOI", n_cross=0)
+    assert "AAOI lesson" in context and "NBIS" not in context and "cross-ticker" not in context

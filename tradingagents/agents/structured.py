@@ -38,6 +38,16 @@ NO_EXTERNAL_TOOLS = (
     "or search the web; if something is missing, say so explicitly."
 )
 
+# The decision agents write the text a customer reads: one analyst's view, not
+# a record of the internal debate.
+ONE_VOICE = (
+    "Write as a single analyst giving one view. Never name the internal roles "
+    "(researchers, managers, trader, risk analysts) and never use the words bull case, "
+    "bear case, aggressive, conservative, debate, rebuttal or rebutted, or say that "
+    "one side won or an argument went unanswered. Use the inputs as evidence only: "
+    "state each point and the conclusion directly, as your own analysis."
+)
+
 
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     """Return ``llm.with_structured_output(schema)`` or ``None`` if unsupported.
