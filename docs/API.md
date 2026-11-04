@@ -82,6 +82,90 @@ Statuses: `queued` → `running` → `completed` | `failed`.
 
 On `completed`, the body includes `decision` (e.g. `BUY`) and `reports` (markdown sections matching the CLI report files).
 
+### Position plan
+
+A completed job also carries `plan`: entries and exits as data, checked against
+verified market data before it is returned. When no plan passes the checks,
+`plan` is `null` and `plan_error` says why. The report and `decision` are still
+valid, so your app decides whether a missing plan costs the customer a credit
+or is retried.
+
+```json
+{
+  "plan": {
+    "as_of_price": 247.19,
+    "as_of_date": "2026-11-02",
+    "horizon": "3-6 months",
+    "now": { "portfolio_pct": 2.5, "summary": "Hold a moderate position; add on dips." },
+    "entries": [
+      { "portfolio_pct": 3.0, "reason": "200-day support",
+        "trigger": { "price": { "when": "at_or_below", "value": 245.0 } } },
+      { "portfolio_pct": 4.0, "reason": "Oversold washout",
+        "trigger": { "all_of": [
+          { "indicator": "rsi_14", "when": "below", "value": 30 },
+          { "price": { "when": "at_or_below", "value": 237.0 } } ] } }
+    ],
+    "exits": [
+      { "kind": "take_profit", "portfolio_pct": 1.5, "reason": "Capex-payoff target",
+        "trigger": { "price": { "when": "at_or_above", "value": 300.0 } } },
+      { "kind": "stop", "portfolio_pct": 0.0, "reason": "Uptrend support fails",
+        "trigger": { "indicator": "close_vs_sma_200", "when": "weekly_close_below" } }
+    ],
+    "scenarios": [
+      { "name": "bull", "price": 330, "probability": 0.25 },
+      { "name": "base", "price": 300, "probability": 0.5 },
+      { "name": "bear", "price": 210, "probability": 0.25 }
+    ],
+    "confidence": "medium",
+    "confidence_reason": "Strong fundamentals, but capex return is unproven."
+  },
+  "plan_error": null
+}
+```
+
+**What the numbers mean.** The plan is for a long-only *model portfolio*, not
+the customer's holdings. `portfolio_pct` is the total position as a share of an
+equity portfolio after the trigger fires (not an increment), between 0 and 10.
+`now` is the recommended size today.
+
+**Triggers** come from a closed list; nothing else is accepted. A trigger is one
+condition, or `all_of` / `any_of` with exactly two (no nesting).
+
+| Condition | Form |
+|---|---|
+| Price | `{"price": {"when": "at_or_below" \| "at_or_above", "value": N}}` |
+| RSI | `{"indicator": "rsi_14", "when": "below" \| "above" \| "crosses_above" \| "crosses_below", "value": N}` |
+| Price vs average | `{"indicator": "sma_20" \| "sma_50" \| "sma_200", "when": "crosses_above" \| "crosses_below"}` |
+| Weekly close | `{"indicator": "close_vs_sma_20" \| "close_vs_sma_50" \| "close_vs_sma_200", "when": "weekly_close_below" \| "weekly_close_above"}` |
+| MACD histogram | `{"indicator": "macd_histogram", "when": "crosses_above" \| "crosses_below"}` (against zero) |
+
+At most 5 entries and 5 exits. `exits[].kind` is `take_profit` or `stop`.
+
+**Checks.** A plan is returned only if all of these hold:
+
+- Entries use `at_or_below` and sit below `as_of_price`; each holds more than
+  `now`, and a deeper entry holds more than a shallower one.
+- A take-profit sits above `as_of_price`; a stop sits below the lowest entry.
+  Every exit holds less than `now`.
+- Scenario probabilities sum to 1, there is exactly one `base`, and its price
+  sits above the stop nearest the price and no higher than the highest take-profit.
+- A stop reduces the largest size the entries build (it fires after they fill);
+  a take-profit reduces `now`, or the entries' size when `now` is 0. Exits reached
+  later never hold more than earlier ones.
+- `as_of_price` matches the verified price, and no trigger is already true at
+  the verified readings (an RSI-below-30 entry is fine at RSI 39, not at 22).
+- A trigger on an indicator reading that is unavailable is an error.
+- The plan agrees with the rating: Sell means `now` is 0; Buy and Overweight
+  mean `now` is above 0.
+
+Treat every free-text field in `plan` (`summary`, `reason`, `confidence_reason`,
+scenario `name`, `horizon`) as untrusted model output: escape it when you show it.
+Only the numbers and triggers are validated.
+
+If a check fails, the plan is regenerated with the problems listed, up to two
+more times. A crossing is judged by which side of the level the reading sits on
+today, and a weekly close by the latest price against the average.
+
 ## Rails client sketch
 
 ```ruby
