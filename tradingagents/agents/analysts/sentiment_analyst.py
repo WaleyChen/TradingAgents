@@ -27,6 +27,8 @@ from tradingagents.agents.post_screen import jev_screen
 from tradingagents.agents.schemas import SentimentReport, render_sentiment_report
 from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
+    NO_HANDLES,
+    SOURCED_NUMBERS,
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -195,5 +197,7 @@ Fill the following fields:
 - **overall_score**: A number from 0 (maximally bearish) to 10 (maximally bullish); 5 is neutral. Keep it consistent with overall_band.
 - **confidence**: low / medium / high, based on data quality and sample size.
 - **narrative**: Full source-by-source breakdown, divergences, dominant narrative themes, catalysts and risks, and a markdown summary table of key sentiment signals (direction, source, supporting evidence).
+
+{NO_HANDLES} {SOURCED_NUMBERS}
 
 {get_language_instruction()}"""

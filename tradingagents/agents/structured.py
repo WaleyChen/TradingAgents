@@ -48,6 +48,19 @@ ONE_VOICE = (
     "state each point and the conclusion directly, as your own analysis."
 )
 
+# A customer cannot check a bare number, so every figure says where it is from.
+SOURCED_NUMBERS = (
+    "Give every figure its source and as-of date, for example (Yahoo Finance, 2026-11-02) "
+    "or (10-Q, quarter ended 2026-06-30). Mark a figure that came from your own "
+    "calculation as derived, and a figure the data did not confirm as unverified."
+)
+
+# Social posts are weak, unaccountable evidence: use them as a small supporting signal.
+NO_HANDLES = (
+    "Treat social-media sentiment as a small supporting signal, never the main basis "
+    "for a conclusion. Do not quote, name or cite any user, handle, username or account."
+)
+
 
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     """Return ``llm.with_structured_output(schema)`` or ``None`` if unsupported.

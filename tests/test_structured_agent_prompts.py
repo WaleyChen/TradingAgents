@@ -18,7 +18,12 @@ import pytest
 import tradingagents.agents.analysts.sentiment_analyst as sentiment
 from tradingagents.agents.managers.portfolio_manager import create_portfolio_manager
 from tradingagents.agents.managers.research_manager import create_research_manager
-from tradingagents.agents.structured import NO_EXTERNAL_TOOLS, ONE_VOICE
+from tradingagents.agents.structured import (
+    NO_EXTERNAL_TOOLS,
+    NO_HANDLES,
+    ONE_VOICE,
+    SOURCED_NUMBERS,
+)
 from tradingagents.agents.trader.trader import create_trader
 
 
@@ -56,6 +61,7 @@ def test_trader_prompt_states_constraint():
     })
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
     assert ONE_VOICE in _prompt_text(captured["prompt"])
+    assert SOURCED_NUMBERS in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -78,6 +84,7 @@ def test_research_manager_prompt_states_constraint():
     })
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
     assert ONE_VOICE in _prompt_text(captured["prompt"])
+    assert SOURCED_NUMBERS in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -107,6 +114,7 @@ def test_portfolio_manager_prompt_states_constraint():
     })
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
     assert ONE_VOICE in _prompt_text(captured["prompt"])
+    assert SOURCED_NUMBERS in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -129,6 +137,7 @@ def test_sentiment_prompt_states_constraint(monkeypatch):
     })
     text = _prompt_text(captured["prompt"])
     assert NO_EXTERNAL_TOOLS in text
+    assert NO_HANDLES in text and SOURCED_NUMBERS in text
     # This agent binds no tools, so tool-range wording must not reappear.
     assert "tool-call date ranges" not in text
 
@@ -175,3 +184,12 @@ def test_the_sentiment_prompt_names_the_subreddits_searched(monkeypatch):
 def test_the_one_voice_rule_bans_the_debate_words_that_leaked_into_reports():
     for word in ("bull case", "bear case", "debate", "rebutted", "aggressive", "conservative"):
         assert word in ONE_VOICE
+
+
+@pytest.mark.unit
+def test_the_other_analysts_must_source_and_date_their_numbers():
+    import tradingagents.agents.analysts.fundamentals_analyst as fundamentals
+    import tradingagents.agents.analysts.market_analyst as market
+    import tradingagents.agents.analysts.news_analyst as news
+    for module in (market, news, fundamentals):
+        assert "SOURCED_NUMBERS" in inspect.getsource(module)

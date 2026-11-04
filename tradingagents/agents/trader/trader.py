@@ -13,6 +13,7 @@ from tradingagents.agents.schemas import TraderProposal, render_trader_proposal
 from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
     ONE_VOICE,
+    SOURCED_NUMBERS,
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -60,6 +61,7 @@ def create_trader(llm):
                     "implies, or omit the field if you cannot state a number. "
                     + NO_EXTERNAL_TOOLS
                     + " " + ONE_VOICE
+                    + " " + SOURCED_NUMBERS
                     + get_language_instruction()
                 ),
             },
