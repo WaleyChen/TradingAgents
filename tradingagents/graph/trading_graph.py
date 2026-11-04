@@ -18,6 +18,7 @@ from tradingagents.llm_clients import create_tier_client, tier_provider
 from tradingagents.memory import TradingMemoryLog, settlement
 from tradingagents.memory.reflection import Reflector
 from tradingagents.plan.node import create_plan_node
+from tradingagents.report_summary import create_summary_node
 from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -111,8 +112,10 @@ class TradingAgentsGraph:
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         plan_node = create_plan_node(self.deep_thinking_llm) if self.config.get("structured_plan") else None
+        summary_node = create_summary_node(self.deep_thinking_llm) if self.config.get("report_summary") else None
         self.workflow = self.graph_setup.setup_graph(
-            selected_analysts, memory_node=self._memory_step, plan_node=plan_node
+            selected_analysts, memory_node=self._memory_step, plan_node=plan_node,
+            summary_node=summary_node,
         )
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None

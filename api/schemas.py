@@ -92,6 +92,10 @@ class AnalysisJobResponse(BaseModel):
         description="Checked position plan; null when none passed the checks (see plan_error).",
     )
     plan_error: str | None = None
+    summary: str | None = Field(
+        default=None,
+        description="About 600 words in one analyst voice; null when the step is off or none fit the length limit.",
+    )
     error: str | None = None
     created_at: datetime
     started_at: datetime | None = None

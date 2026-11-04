@@ -108,7 +108,7 @@ class GraphSetup:
 
     def setup_graph(
         self, selected_analysts=("market", "social", "news", "fundamentals"), memory_node=None,
-        plan_node=None,
+        plan_node=None, summary_node=None,
     ):
         """Set up and compile the agent workflow graph.
 
@@ -122,6 +122,7 @@ class GraphSetup:
                 ``past_context``. It runs alongside the analysts.
             plan_node: Node that turns the final decision into a checked
                 position plan. It runs after the Portfolio Manager.
+            summary_node: Node that writes the report summary. It runs last.
         """
         plan = build_analyst_execution_plan(selected_analysts)
 
@@ -185,11 +186,15 @@ class GraphSetup:
                 RISK_ANALYSIS_PATH_MAP,
             )
 
-        if plan_node is None:
-            workflow.add_edge("Portfolio Manager", END)
-        else:
+        last = "Portfolio Manager"
+        if plan_node is not None:
             workflow.add_node("Plan", plan_node)
-            workflow.add_edge("Portfolio Manager", "Plan")
-            workflow.add_edge("Plan", END)
+            workflow.add_edge(last, "Plan")
+            last = "Plan"
+        if summary_node is not None:
+            workflow.add_node("Summary", summary_node)
+            workflow.add_edge(last, "Summary")
+            last = "Summary"
+        workflow.add_edge(last, END)
 
         return workflow

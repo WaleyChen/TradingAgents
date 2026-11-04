@@ -39,6 +39,7 @@ class AnalysisJob:
     reports: dict[str, str | None] | None = None
     plan: dict | None = None
     plan_error: str | None = None
+    summary: str | None = None
     error: str | None = None
     created_at: datetime = field(default_factory=_utcnow)
     started_at: datetime | None = None
@@ -56,6 +57,7 @@ class AnalysisJob:
             reports=AnalysisReports(**self.reports) if self.reports else None,
             plan=self.plan,
             plan_error=self.plan_error,
+            summary=self.summary,
             error=self.error,
             created_at=self.created_at,
             started_at=self.started_at,
@@ -120,13 +122,14 @@ class JobManager:
             request.trade_date,
         )
         try:
-            decision, reports, plan, plan_error = AnalysisResult(*self._runner(request))
+            decision, reports, plan, plan_error, summary = AnalysisResult(*self._runner(request))
             with self._lock:
                 job = self._jobs[job_id]
                 job.decision = decision
                 job.reports = reports
                 job.plan = plan
                 job.plan_error = plan_error
+                job.summary = summary
                 job.status = JobStatus.completed
                 job.completed_at = _utcnow()
             logger.info("Completed analysis job %s decision=%s", job_id, decision)

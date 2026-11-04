@@ -19,6 +19,7 @@ class AnalysisResult(NamedTuple):
     reports: dict[str, str | None]
     plan: dict[str, Any] | None = None
     plan_error: str | None = None
+    summary: str | None = None
 
 
 def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
@@ -26,6 +27,8 @@ def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
     config = deepcopy(DEFAULT_CONFIG)
     if "TRADINGAGENTS_STRUCTURED_PLAN" not in os.environ:
         config["structured_plan"] = True  # the API returns a checked plan unless told not to
+    if "TRADINGAGENTS_REPORT_SUMMARY" not in os.environ:
+        config["report_summary"] = True  # and a short summary
     config["memory_n_cross"] = 0  # a customer's report must not draw on other tickers' lessons
 
     if request.max_debate_rounds is not None:
@@ -86,4 +89,5 @@ def run_analysis(request: CreateAnalysisRequest) -> AnalysisResult:
         extract_reports(final_state),
         final_state.get("position_plan"),
         final_state.get("plan_error"),
+        final_state.get("report_summary"),
     )

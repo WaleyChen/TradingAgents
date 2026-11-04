@@ -22,6 +22,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MAX_TOOL_ROUNDS":      "max_tool_rounds",
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_STRUCTURED_PLAN":      "structured_plan",
+    "TRADINGAGENTS_REPORT_SUMMARY":       "report_summary",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
@@ -133,6 +134,9 @@ def build_default_config() -> dict:
         # exits, scenarios) with one more model call. Off for the CLI; the
         # HTTP API turns it on.
         "structured_plan": False,
+        # Write a ~600-word summary of the whole report with one more model call.
+        # Off for the CLI; the HTTP API turns it on.
+        "report_summary": False,
         # Output language for analyst reports and final decision
         # Internal agent debate stays in English for reasoning quality
         "output_language": "English",

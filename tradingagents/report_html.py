@@ -267,7 +267,9 @@ def render_report(ticker: str, final_state: dict, settings: dict | None, parts) 
             f'<li><a href="#s{n}-{m}"><span class="bar"></span> <span class="label">{escape(agent)}</span></a></li>'
             for m, (agent, _f, _t) in enumerate(written, 1)
         )
-        numeral, _, name = heading.partition(". ")
+        numeral, dot, name = heading.partition(". ")
+        if not dot:  # a heading with no numeral, like the summary
+            numeral, name = "", heading
         contents.append(f'<li><a href="#s{n}"><span class="num">{escape(numeral)}</span> '
                         f'<span class="label">{escape(name)}</span></a><ul>{agents}</ul></li>')
         body.append(f'<section id="s{n}"><h2>{escape(heading)}</h2>')

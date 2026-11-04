@@ -82,6 +82,21 @@ Statuses: `queued` → `running` → `completed` | `failed`.
 
 On `completed`, the body includes `decision` (e.g. `BUY`) and `reports` (markdown sections matching the CLI report files).
 
+### Summary
+
+A completed job also carries `summary`: about 600 words (never more than 700) in
+one analyst's voice, covering the rating and what to do now, what decided it, the
+risks and what would change the view, and the plan's levels. Figures carry a source
+and date and are marked as derived or unverified where that applies. It is written
+by one more model call after the decision. If none fits the length limit after
+retries, `summary` is `null`; the reports are still valid. Set
+`TRADINGAGENTS_REPORT_SUMMARY=0` to turn the step off.
+
+`reports` and the saved report files are the appendix: the analysts' full text and
+the internal debate, written for the record rather than the customer. They still
+name internal roles ("bull", "aggressive analyst"), so show `summary`, not them.
+Treat the text as untrusted model output and escape it when you show it.
+
 ### Position plan
 
 A completed job also carries `plan`: entries and exits as data, checked against

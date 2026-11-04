@@ -49,6 +49,9 @@ def _header(ticker: str, final_state: dict, settings: dict | None) -> str:
 
 # The report's sections in order: (heading, folder, [(agent, file, state path)]).
 _SECTIONS = (
+    ("Summary", "0_summary", (
+        ("Summary", "summary.md", ("report_summary",)),
+    )),
     ("I. Analyst Team Reports", "1_analysts", (
         ("Market Analyst", "market.md", ("market_report",)),
         ("Sentiment Analyst", "sentiment.md", ("sentiment_report",)),
@@ -106,6 +109,9 @@ def _report_parts(final_state: dict) -> list[tuple[str, str, list[tuple[str, str
                 written.append((agent, filename, value))
         if written:
             parts.append((heading, folder, written))
+    if parts and parts[0][1] == "0_summary":  # everything after the summary is its appendix
+        parts = [parts[0]] + [(f"Appendix {heading}", folder, written)
+                              for heading, folder, written in parts[1:]]
     return parts
 
 
