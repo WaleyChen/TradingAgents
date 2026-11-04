@@ -21,7 +21,7 @@ from api.schemas import (
     CreateAnalysisRequest,
     JobStatus,
 )
-from api.service import run_analysis
+from api.service import AnalysisResult, run_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,8 @@ class AnalysisJob:
     status: JobStatus = JobStatus.queued
     decision: str | None = None
     reports: dict[str, str | None] | None = None
+    plan: dict | None = None
+    plan_error: str | None = None
     error: str | None = None
     created_at: datetime = field(default_factory=_utcnow)
     started_at: datetime | None = None
@@ -52,6 +54,8 @@ class AnalysisJob:
             analysts=list(self.request.analysts),
             decision=self.decision,
             reports=AnalysisReports(**self.reports) if self.reports else None,
+            plan=self.plan,
+            plan_error=self.plan_error,
             error=self.error,
             created_at=self.created_at,
             started_at=self.started_at,
@@ -66,7 +70,7 @@ class JobManager:
     def __init__(
         self,
         max_workers: int = 1,
-        runner: Callable[[CreateAnalysisRequest], tuple[str, dict]] | None = None,
+        runner: Callable[[CreateAnalysisRequest], AnalysisResult | tuple] | None = None,
     ):
         self._jobs: dict[str, AnalysisJob] = {}
         self._lock = threading.Lock()
@@ -116,11 +120,13 @@ class JobManager:
             request.trade_date,
         )
         try:
-            decision, reports = self._runner(request)
+            decision, reports, plan, plan_error = AnalysisResult(*self._runner(request))
             with self._lock:
                 job = self._jobs[job_id]
                 job.decision = decision
                 job.reports = reports
+                job.plan = plan
+                job.plan_error = plan_error
                 job.status = JobStatus.completed
                 job.completed_at = _utcnow()
             logger.info("Completed analysis job %s decision=%s", job_id, decision)

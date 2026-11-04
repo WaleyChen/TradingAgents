@@ -68,6 +68,8 @@ class AgentState(MessagesState):
     ]
     final_trade_decision: Annotated[str, "Final decision from the Portfolio Manager"]
     final_rating: Annotated[str, "The Portfolio Manager's 5-tier rating, or REVIEW when it has none"]
+    position_plan: Annotated[dict | None, "Validated position plan (entries, exits, scenarios) from the Plan step; None when the step is off or no plan passed the checks"]
+    plan_error: Annotated[str | None, "Why the Plan step returned no plan; None when it did or the step is off"]
     past_context: Annotated[str, "Memory log context for the Portfolio Manager (same-ticker decisions + cross-ticker lessons), written by the Memory Log step"]
     memory_note: Annotated[str, "What the Memory Log step could not settle or read this run, for the report; empty when all went well"]
     portfolio_context: Annotated[str, "Caller-supplied holdings and cash, rendered at run start; empty when not provided"]

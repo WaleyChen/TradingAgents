@@ -2,18 +2,30 @@
 
 from __future__ import annotations
 
+import os
 from copy import deepcopy
 from datetime import date
-from typing import Any
+from typing import Any, NamedTuple
 
 from api.schemas import CreateAnalysisRequest
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 
+class AnalysisResult(NamedTuple):
+    """What a finished run hands back. A runner may return just the first two."""
+
+    decision: str
+    reports: dict[str, str | None]
+    plan: dict[str, Any] | None = None
+    plan_error: str | None = None
+
+
 def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
     """Merge request overrides onto DEFAULT_CONFIG (env overrides already applied)."""
     config = deepcopy(DEFAULT_CONFIG)
+    if "TRADINGAGENTS_STRUCTURED_PLAN" not in os.environ:
+        config["structured_plan"] = True  # the API returns a checked plan unless told not to
 
     if request.max_debate_rounds is not None:
         config["max_debate_rounds"] = request.max_debate_rounds
@@ -43,8 +55,8 @@ def extract_reports(final_state: dict[str, Any]) -> dict[str, str | None]:
     }
 
 
-def run_analysis(request: CreateAnalysisRequest) -> tuple[str, dict[str, str | None]]:
-    """Execute the graph synchronously; returns (decision, reports)."""
+def run_analysis(request: CreateAnalysisRequest) -> AnalysisResult:
+    """Execute the graph synchronously and return its decision, reports and plan."""
     config = build_config(request)
     graph = TradingAgentsGraph(
         selected_analysts=list(request.analysts),
@@ -68,4 +80,9 @@ def run_analysis(request: CreateAnalysisRequest) -> tuple[str, dict[str, str | N
         str(decision.content) if hasattr(decision, "content") else str(decision).strip()
     )
 
-    return decision_text, extract_reports(final_state)
+    return AnalysisResult(
+        decision_text,
+        extract_reports(final_state),
+        final_state.get("position_plan"),
+        final_state.get("plan_error"),
+    )

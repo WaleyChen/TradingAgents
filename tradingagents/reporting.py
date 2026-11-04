@@ -10,6 +10,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tradingagents.agents.rating import run_rating
+from tradingagents.plan.render import render_plan
 
 
 def analyst_names(keys) -> list[str]:
@@ -70,11 +71,30 @@ _SECTIONS = (
     ("V. Portfolio Manager Decision", "5_portfolio", (
         ("Portfolio Manager", "decision.md", ("final_trade_decision",)),
     )),
+    ("VI. Position Plan", "6_plan", (
+        ("Position Plan", "plan.md", ("position_plan_text",)),
+    )),
 )
+
+
+def _with_plan_text(final_state: dict) -> dict:
+    """The state with the plan, or why there is none, written out as text."""
+    plan, error = final_state.get("position_plan"), final_state.get("plan_error")
+    if plan:
+        try:
+            text = render_plan(plan)
+        except ValueError:  # a plan that no longer parses must not lose the report
+            text = "No position plan: it could not be rendered."
+    elif error:
+        text = f"No position plan: {error}"
+    else:
+        return final_state
+    return {**final_state, "position_plan_text": text}
 
 
 def _report_parts(final_state: dict) -> list[tuple[str, str, list[tuple[str, str, str]]]]:
     """The sections with something to say: (heading, folder, [(agent, file, text)])."""
+    final_state = _with_plan_text(final_state)
     parts = []
     for heading, folder, agents in _SECTIONS:
         written = []

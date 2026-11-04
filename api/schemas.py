@@ -8,6 +8,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+from tradingagents.plan import Plan
+
 AnalystName = Literal["market", "social", "news", "fundamentals"]
 AssetType = Literal["stock", "crypto"]
 
@@ -85,6 +87,11 @@ class AnalysisJobResponse(BaseModel):
     analysts: list[AnalystName]
     decision: str | None = None
     reports: AnalysisReports | None = None
+    plan: Plan | None = Field(
+        default=None,
+        description="Checked position plan; null when none passed the checks (see plan_error).",
+    )
+    plan_error: str | None = None
     error: str | None = None
     created_at: datetime
     started_at: datetime | None = None
