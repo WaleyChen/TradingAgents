@@ -24,7 +24,8 @@ MAX_AMOUNT = 10**15
 MAX_LABEL = 40
 MAX_NOTES = 4000
 
-Source = Literal["sec_xbrl", "financial_datasets", "getmarketalerts"]
+Source = Literal["sec_xbrl", "financial_datasets", "getmarketalerts", "yahoo_finance", "sec_13f", "sec_form4",
+                 "congress_disclosures"]
 Amount = Annotated[int | None, Field(default=None, gt=-MAX_AMOUNT, lt=MAX_AMOUNT)]
 PerShare = Annotated[float | None, Field(default=None, gt=-1e6, lt=1e6)]
 Label = Annotated[str, Field(min_length=1, max_length=MAX_LABEL)]
@@ -187,6 +188,140 @@ class Events(_Company):
     recent_earnings: list[EarningsReport] = Field(default_factory=list, max_length=4)
 
 
+Count = Annotated[int, Field(ge=0, lt=10**9)]
+Shares = Annotated[int, Field(ge=0, lt=10**13)]
+Person = Annotated[str, Field(min_length=1, max_length=80)]
+
+
+class FundHolder(_Strict):
+    """One tracked manager's 13F position at the quarter end."""
+
+    manager: Person
+    firm: Person | None = None
+    shares: Shares
+    value_usd: Amount
+    weight_pct: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    shares_change: Annotated[int | None, Field(default=None, gt=-10**13, lt=10**13)]
+    shares_change_pct: Annotated[float | None, Field(default=None, gt=-100.01, lt=1e7)]
+    action: Literal["new", "added", "trimmed", "exited", "unchanged"]
+    filed_on: date
+    estimated_cost: Level
+
+
+class Funds(_Strict):
+    source: Literal["sec_13f"]
+    quarter_end: date
+    managers_tracked: Annotated[int, Field(ge=1, lt=10**6)]
+    coverage: Annotated[str, Field(max_length=300)] | None = None
+    holders: list[FundHolder] = Field(default_factory=list, max_length=10)
+
+
+class InsiderTrade(_Strict):
+    name: Person
+    title: Person
+    is_director: bool
+    transaction_date: date
+    filing_date: date
+    kind: Literal["buy", "sale"]
+    shares: Annotated[int, Field(gt=0, lt=10**13)]
+    price_per_share: Annotated[float, Field(gt=0, lt=1e7)]
+    value_usd: Amount
+    shares_owned_after: Annotated[int | None, Field(default=None, ge=0, lt=10**13)]
+    form_type: Annotated[str, Field(min_length=1, max_length=10)]
+
+
+class Insiders(_Strict):
+    source: Literal["sec_form4"]
+    window_days: Annotated[int, Field(ge=1, le=365)]
+    buys: Count
+    sells: Count
+    net_value_usd: Amount
+    trades: list[InsiderTrade] = Field(default_factory=list, max_length=20)
+
+
+class CongressTrade(_Strict):
+    member: Person
+    chamber: Literal["House", "Senate"]
+    district: Annotated[str, Field(min_length=1, max_length=10)] | None = None
+    owner: Literal["self", "spouse", "dependent", "joint"]
+    side: Literal["buy", "sell"]
+    traded_on: date
+    disclosed_on: date
+    amount_min: Annotated[int, Field(ge=0, lt=10**12)]
+    amount_max: Annotated[int, Field(ge=0, lt=10**12)]
+
+
+class Congress(_Strict):
+    source: Literal["congress_disclosures"]
+    window_days: Annotated[int, Field(ge=1, le=365)]
+    buys: Count
+    sells: Count
+    trades: list[CongressTrade] = Field(default_factory=list, max_length=20)
+
+
+class Ownership(_Company):
+    """Who holds and trades the stock, with the dates that say how old each fact is."""
+
+    currency: Literal["USD"]
+    as_of: date
+    funds: Funds | None = None
+    insiders: Insiders | None = None
+    congress: Congress | None = None
+
+
+class PeTtm(_Strict):
+    """Price over trailing-twelve-month EPS now, and over the last few years."""
+
+    latest: Annotated[float, Field(gt=0, lt=1e5)]
+    min_5y: Annotated[float | None, Field(default=None, gt=0, lt=1e5)]
+    median_5y: Annotated[float | None, Field(default=None, gt=0, lt=1e5)]
+    max_5y: Annotated[float | None, Field(default=None, gt=0, lt=1e5)]
+    percentile_5y: Annotated[float | None, Field(default=None, ge=0, le=1)]
+    years: Annotated[int | None, Field(default=None, ge=1, le=30)]
+
+
+class ValuationHistory(_Company):
+    """The stock's valuation against its own past."""
+
+    currency: Literal["USD"]
+    source: Source
+    as_of: date
+    pe_ttm: PeTtm | None = None
+    peg: Annotated[float | None, Field(default=None, gt=-1000, lt=1000)]
+
+
+class Reading(_Strict):
+    value: Annotated[float, Field(ge=0, lt=1e6)]
+    as_of: date
+
+
+class FearGreed(_Strict):
+    value: Annotated[float, Field(ge=0, le=100)]
+    label: Annotated[str, Field(min_length=1, max_length=30)]
+    as_of: date
+
+
+class MarketBackdrop(_Strict):
+    """Market-wide measures, each with its own date because they update on different days."""
+
+    source: Source
+    as_of: date
+    vix: Reading | None = None
+    fear_and_greed: FearGreed | None = None
+    buffett_indicator_pct: Reading | None = None
+    credit_spread_hy_bps: Reading | None = None
+
+
+class PriorReport(_Company):
+    """One of our own earlier reports on this company."""
+
+    as_of: date
+    decision: Literal["Buy", "Overweight", "Hold", "Underweight", "Sell"]
+    target: Level
+    price_then: Annotated[float, Field(gt=0, lt=1e7)]
+    horizon: Annotated[str, Field(min_length=1, max_length=40)] | None = None
+
+
 class Context(_Strict):
     """What a caller supplies with a request. Only the blocks defined here are accepted."""
 
@@ -196,5 +331,9 @@ class Context(_Strict):
     events: Events | None = None
     company: Company | None = None
     technicals: Technicals | None = None
+    ownership: Ownership | None = None
+    valuation_history: ValuationHistory | None = None
+    market_backdrop: MarketBackdrop | None = None
+    prior_reports: list[PriorReport] = Field(default_factory=list, max_length=3)
     notes: str | None = Field(default=None, max_length=MAX_NOTES,
                               description="Free text. Unverified: context only, never a source for a figure.")

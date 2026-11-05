@@ -9,9 +9,13 @@ from tradingagents.context.models import (
     Context,
     Events,
     Financials,
+    MarketBackdrop,
+    Ownership,
     Price,
+    PriorReport,
     Technicals,
+    ValuationHistory,
 )
 
-__all__ = ["SUPPORTED_SCHEMA_VERSIONS", "Company", "Context", "Events", "Financials", "Price", "Problem", "Technicals",
+__all__ = ["SUPPORTED_SCHEMA_VERSIONS", "Company", "Context", "Events", "Financials", "Ownership", "Price", "Problem", "Technicals",
            "check_context", "check_financials", "context_digest", "derive_metrics"]

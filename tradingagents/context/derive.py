@@ -6,7 +6,14 @@ the schema, so there is no debt-to-equity: only liabilities to equity.
 
 from __future__ import annotations
 
-from tradingagents.context.models import Company, Financials, Price, Technicals
+from tradingagents.context.models import (
+    Company,
+    Financials,
+    Ownership,
+    Price,
+    PriorReport,
+    Technicals,
+)
 
 
 def _pct(part: float | None, whole: float | None) -> float | None:
@@ -106,3 +113,44 @@ def derive_technicals(t: Technicals) -> dict[str, float]:
         "volume_vs_average": t.volume / t.volume_avg_50d if t.volume is not None and t.volume_avg_50d else None,
     }
     return {name: value for name, value in metrics.items() if value is not None}
+
+
+def derive_ownership(o: Ownership) -> dict[str, int]:
+    """Counts the report may state, taken from the lists in code. Fund counts cover the listed holders only."""
+    out: dict[str, int] = {}
+    if o.funds is not None:
+        out["funds_listed"] = len(o.funds.holders)
+        out["funds_managers_tracked"] = o.funds.managers_tracked
+        for action in ("new", "added", "trimmed", "exited", "unchanged"):
+            out[f"funds_{action}"] = sum(h.action == action for h in o.funds.holders)
+    if o.insiders is not None:
+        out.update(insider_buys=o.insiders.buys, insider_sells=o.insiders.sells,
+                   insider_window_days=o.insiders.window_days)
+        if o.insiders.net_value_usd is not None:
+            out["insider_net_value"] = o.insiders.net_value_usd
+    if o.congress is not None:
+        out.update(congress_buys=o.congress.buys, congress_sells=o.congress.sells,
+                   congress_window_days=o.congress.window_days)
+    return out
+
+
+def derive_prior_reports(reports: list[PriorReport], current_price: float | None) -> list[dict]:
+    """How the price has moved since each earlier report, and whether that is toward its target."""
+    from tradingagents.rating_label import plain_rating
+
+    rows = []
+    for r in reports:
+        plain = plain_rating(r.decision)
+        row = {"as_of": r.as_of, "decision_label": plain.label if plain else r.decision, "target": r.target,
+               "price_then": r.price_then, "horizon": r.horizon, "price_change_pct": None,
+               "direction_to_target": None, "progress_pct": None}
+        if current_price is not None:
+            change = current_price - r.price_then
+            row["price_change_pct"] = (current_price / r.price_then - 1) * 100
+            gap = (r.target - r.price_then) if r.target is not None else 0
+            if gap:
+                progress = change / gap
+                row["direction_to_target"] = "reached" if progress >= 1 else "toward" if progress > 0 else "away"
+                row["progress_pct"] = max(progress, 0.0) * 100
+        rows.append(row)
+    return rows

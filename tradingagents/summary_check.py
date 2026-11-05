@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from tradingagents.context import Context, derive_metrics
-from tradingagents.context.derive import derive_technicals
+from tradingagents.context.derive import derive_ownership, derive_technicals
 from tradingagents.plan.check import Readings
 
 Unit = Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
@@ -122,6 +122,9 @@ def _context_values(context: Context) -> list[Known]:
         found.append(Known("price close", "usd", context.price.close, "context"))
     if context.technicals is not None:
         found += _technicals_values(context.technicals)
+    if context.ownership is not None:
+        found += _ownership_values(context.ownership)
+    found += _market_values(context)
     if context.company is not None:
         if context.company.market_cap:
             found.append(Known("market cap", "usd", float(context.company.market_cap), "context"))
@@ -152,6 +155,51 @@ def _technicals_values(t) -> list[Known]:
         label = (name.replace("pct_vs_", "pct vs ").replace("pct_from_", "pct from ")
                  if name.startswith("pct_") else name.replace("_", " "))
         found.append(Known(label, "x" if name == "volume_vs_average" else "pct", float(value), "context"))
+    return found
+
+
+def _market_values(context: Context) -> list[Known]:
+    found = []
+    pe = context.valuation_history.pe_ttm if context.valuation_history else None
+    if pe is not None:
+        found.append(Known("pe ttm", "x", pe.latest, "context"))
+        for label, value in (("pe ttm min 5y", pe.min_5y), ("pe ttm median 5y", pe.median_5y),
+                             ("pe ttm max 5y", pe.max_5y)):
+            found += [Known(label, "x", value, "context")] if value is not None else []
+        found += [Known("pe ttm percentile", "pct", pe.percentile_5y * 100, "context")] if pe.percentile_5y is not None else []
+        found += [Known("pe ttm years", "number", float(pe.years), "context")] if pe.years is not None else []
+    if context.valuation_history and context.valuation_history.peg is not None:
+        found.append(Known("peg", "x", context.valuation_history.peg, "context"))
+    b = context.market_backdrop
+    if b is not None:
+        found += [Known("vix", "number", b.vix.value, "context")] if b.vix else []
+        found += [Known("fear and greed", "number", b.fear_and_greed.value, "context")] if b.fear_and_greed else []
+        found += ([Known("buffett indicator", "pct", b.buffett_indicator_pct.value, "context")]
+                  if b.buffett_indicator_pct else [])
+        found += [Known("credit spread", "number", b.credit_spread_hy_bps.value, "context")] if b.credit_spread_hy_bps else []
+    for r in context.prior_reports:
+        found += [Known("prior target", "usd", r.target, "context")] if r.target is not None else []
+        found.append(Known("prior price", "usd", r.price_then, "context"))
+    return found
+
+
+def _ownership_values(o) -> list[Known]:
+    """The counts, the totals and each listed figure, so the report may cite them as verified."""
+    found = [Known(name.replace("_", " "), "usd" if name == "insider_net_value" else "number", float(value), "context")
+             for name, value in derive_ownership(o).items()]
+    for h in (o.funds.holders if o.funds else []):
+        found += [Known("fund holder shares", "number", float(h.shares), "context")]
+        found += [Known("fund holder value", "usd", float(h.value_usd), "context")] if h.value_usd is not None else []
+        found += [Known("fund holder weight", "pct", h.weight_pct, "context")] if h.weight_pct is not None else []
+        found += [Known("fund holder change", "pct", h.shares_change_pct, "context")] if h.shares_change_pct is not None else []
+        found += [Known("estimated cost", "usd", h.estimated_cost, "context")] if h.estimated_cost is not None else []
+    for t in (o.insiders.trades if o.insiders else []):
+        found += [Known("insider trade shares", "number", float(t.shares), "context"),
+                  Known("insider trade price", "usd", t.price_per_share, "context")]
+        found += [Known("insider trade value", "usd", float(t.value_usd), "context")] if t.value_usd is not None else []
+    for t in (o.congress.trades if o.congress else []):
+        found += [Known("congress amount minimum", "usd", float(t.amount_min), "context"),
+                  Known("congress amount maximum", "usd", float(t.amount_max), "context")]
     return found
 
 

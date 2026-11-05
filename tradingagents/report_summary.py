@@ -110,6 +110,10 @@ in plain words. Say what to do for someone who owns the stock and for someone wh
 Write "your position" and "your account"; do not write "standard weight", "model portfolio",
 "overweight" or "underweight". Explain any indicator you mention in a few words.
 
+If previous reports are given, add two or three sentences on how the view has changed since the
+last one: the rating then and now, the target then and now, and whether the price has moved toward
+or away from the old target. Do not let the previous rating decide the new one.
+
 If there is a position plan, give the position plan's target and expected return and
 no other price target, even if another section states one; never call a moving average
 or a support level a target or a fair value.
@@ -183,9 +187,10 @@ def create_summary_node(llm, context: Context | None = None, include_reports: bo
     def summary_node(state) -> dict:
         try:
             readings = _readings(state)
+            run = Context.model_validate(state["run_context"]) if state.get("run_context") else context
             outcome = write_summary(
-                llm, _material(state, context, readings, include_reports), ticker=state["company_of_interest"],
-                trade_date=state["trade_date"], known=_known(context, readings, state.get("position_plan")))
+                llm, _material(state, run, readings, include_reports), ticker=state["company_of_interest"],
+                trade_date=state["trade_date"], known=_known(run, readings, state.get("position_plan")))
         except Exception:  # the report is done; a failure here must not discard it
             logger.exception("Summary: unexpected failure for %s", state.get("company_of_interest"))
             return {"report_summary": None, "summary_figures": None, "summary_problems": []}

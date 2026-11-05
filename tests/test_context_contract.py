@@ -32,7 +32,8 @@ def test_the_schema_file_matches_the_code():
 def test_the_schema_describes_the_closed_context():
     schema = context_json_schema()
     assert schema["additionalProperties"] is False
-    assert set(schema["properties"]) == {"schema_version", "financials", "price", "events", "company", "technicals", "notes"}
+    assert set(schema["properties"]) == {"schema_version", "financials", "price", "events", "company", "technicals", "ownership",
+                                       "valuation_history", "market_backdrop", "prior_reports", "notes"}
     assert "Statement" in schema["$defs"] and "Balance" in schema["$defs"]
 
 

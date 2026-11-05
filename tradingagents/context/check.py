@@ -17,9 +17,13 @@ from tradingagents.context.models import (
     Context,
     Events,
     Financials,
+    MarketBackdrop,
+    Ownership,
     Price,
+    PriorReport,
     Statement,
     Technicals,
+    ValuationHistory,
 )
 
 # How long each kind of period runs, in days.
@@ -221,6 +225,165 @@ def check_technicals(t: Technicals, price: Price | None, trade_date: date | None
     return found
 
 
+_PAGE = 20          # insider and congress lists stop here; counts above that are not listed
+_VALUE_TOLERANCE = 0.02
+
+
+def _later(path: str, label: str, when: date, as_of: date) -> list[Problem]:
+    return [Problem("date_after_as_of", path, f"{label} {when} is after as_of {as_of}")] if when > as_of else []
+
+
+def _check_holder(h, i: int, quarter_end: date, as_of: date) -> list[Problem]:
+    path, found = f"ownership.funds.holders[{i}]", []
+    found += _later(f"{path}.filed_on", f"{h.manager}: filed on", h.filed_on, as_of)
+    if h.filed_on < quarter_end:
+        found.append(Problem("filed_before_period_end", f"{path}.filed_on",
+                             f"{h.manager}: filed {h.filed_on}, before the quarter ended {quarter_end}"))
+    change, bad = h.shares_change, False
+    if change is not None:
+        bad = ((h.action == "new" and change != h.shares) or (h.action == "added" and change <= 0)
+               or (h.action == "trimmed" and change >= 0) or (h.action == "unchanged" and change != 0)
+               or (h.action == "exited" and (h.shares != 0 or change >= 0)))
+        prior = h.shares - change
+        if h.shares_change_pct is not None and prior > 0:
+            bad = bad or abs(h.shares_change_pct - change / prior * 100) > max(0.5, 0.01 * abs(h.shares_change_pct))
+    elif h.action == "exited" and h.shares != 0:
+        bad = True
+    if bad:
+        found.append(Problem("holder_change_inconsistent", path,
+                             f"{h.manager}: the action {h.action!r}, the shares and the change do not agree"))
+    return found
+
+
+def _check_funds(f, as_of: date) -> list[Problem]:
+    found = _later("ownership.funds.quarter_end", "the quarter end", f.quarter_end, as_of)
+    for i, h in enumerate(f.holders):
+        found += _check_holder(h, i, f.quarter_end, as_of)
+    if len(f.holders) > f.managers_tracked:
+        found.append(Problem("managers_tracked_too_low", "ownership.funds",
+                             f"{len(f.holders)} holders are listed but only {f.managers_tracked} managers are tracked"))
+    return found
+
+
+def _counts(listed: list, buys: int, sells: int, kind_of, code: str, path: str) -> list[Problem]:
+    """Counts must cover every listed trade, and equal them when the list is not cut off."""
+    n_buy = sum(kind_of(t) == "buy" for t in listed)
+    n_sell = len(listed) - n_buy
+    if n_buy > buys or n_sell > sells or (len(listed) < _PAGE and (n_buy, n_sell) != (buys, sells)):
+        return [Problem(code, path, f"the counts say {buys} buys and {sells} sells, "
+                                    f"but the list has {n_buy} buys and {n_sell} sells")]
+    return []
+
+
+def _check_insiders(ins, as_of: date) -> list[Problem]:
+    found = []
+    for i, t in enumerate(ins.trades):
+        path = f"ownership.insiders.trades[{i}]"
+        found += _later(f"{path}.filing_date", "the filing date", t.filing_date, as_of)
+        if t.filing_date < t.transaction_date:
+            found.append(Problem("filing_before_transaction", path, f"filed {t.filing_date}, before the trade on {t.transaction_date}"))
+        if not as_of - timedelta(days=ins.window_days) <= t.transaction_date <= as_of:
+            found.append(Problem("trade_outside_window", path,
+                                 f"the trade on {t.transaction_date} is outside the {ins.window_days}-day window"))
+        if t.value_usd is not None and abs(t.value_usd - t.shares * t.price_per_share) > _VALUE_TOLERANCE * t.value_usd:
+            found.append(Problem("trade_value_mismatch", path,
+                                 f"value {t.value_usd} is not {t.shares} shares at {t.price_per_share}"))
+    found += _counts(ins.trades, ins.buys, ins.sells, lambda t: t.kind, "insider_count_mismatch", "ownership.insiders")
+    complete = len(ins.trades) < _PAGE and all(t.value_usd is not None for t in ins.trades)
+    if complete and ins.net_value_usd is not None:
+        net = sum(t.value_usd if t.kind == "buy" else -t.value_usd for t in ins.trades)
+        if abs(net - ins.net_value_usd) > max(1000, _VALUE_TOLERANCE * abs(ins.net_value_usd)):
+            found.append(Problem("insider_net_mismatch", "ownership.insiders",
+                                 f"net value {ins.net_value_usd} is not the listed trades' {net}"))
+    return found
+
+
+def _check_congress(c, as_of: date) -> list[Problem]:
+    found = []
+    for i, t in enumerate(c.trades):
+        path = f"ownership.congress.trades[{i}]"
+        found += _later(f"{path}.disclosed_on", "the disclosure date", t.disclosed_on, as_of)
+        if t.disclosed_on < t.traded_on:
+            found.append(Problem("disclosed_before_traded", path, f"disclosed {t.disclosed_on}, before the trade on {t.traded_on}"))
+        if t.amount_min > t.amount_max:
+            found.append(Problem("amount_range_inverted", path, f"the amount range {t.amount_min}-{t.amount_max} is inverted"))
+        if not as_of - timedelta(days=c.window_days) <= t.disclosed_on <= as_of:
+            found.append(Problem("trade_outside_window", path,
+                                 f"disclosed {t.disclosed_on}, outside the {c.window_days}-day window"))
+    found += _counts(c.trades, c.buys, c.sells, lambda t: "buy" if t.side == "buy" else "sell",
+                     "congress_count_mismatch", "ownership.congress")
+    return found
+
+
+def check_ownership(o: Ownership) -> list[Problem]:
+    found = []
+    if o.funds is not None:
+        found += _check_funds(o.funds, o.as_of)
+    if o.insiders is not None:
+        found += _check_insiders(o.insiders, o.as_of)
+    if o.congress is not None:
+        found += _check_congress(o.congress, o.as_of)
+    return found
+
+
+def check_valuation(v: ValuationHistory) -> list[Problem]:
+    pe, found = v.pe_ttm, []
+    if pe is None:
+        return found
+    path = "valuation_history.pe_ttm"
+    low, med, high = pe.min_5y, pe.median_5y, pe.max_5y
+    ordered = [x for x in (low, med, high) if x is not None]
+    if ordered != sorted(ordered) or (low is not None and pe.latest < low * 0.99) \
+            or (high is not None and pe.latest > high * 1.01):
+        found.append(Problem("valuation_range_inconsistent", path,
+                             f"P/E {pe.latest} is not inside its own range {low}-{high} (median {med})"))
+    p = pe.percentile_5y
+    if p is not None and ((high is not None and pe.latest >= high * 0.99 and p < 0.95)
+                          or (low is not None and pe.latest <= low * 1.01 and p > 0.05)
+                          or (med is not None and pe.latest > med * 1.02 and p < 0.45)
+                          or (med is not None and pe.latest < med * 0.98 and p > 0.55)):
+        found.append(Problem("percentile_inconsistent", path,
+                             f"percentile {p} does not fit a P/E of {pe.latest} within {low}-{high} (median {med})"))
+    return found
+
+
+_FEAR_GREED_BANDS = ((25, "extreme fear"), (45, "fear"), (56, "neutral"), (76, "greed"), (101, "extreme greed"))
+
+
+def check_backdrop(b: MarketBackdrop) -> list[Problem]:
+    found = []
+    for name in ("vix", "fear_and_greed", "buffett_indicator_pct", "credit_spread_hy_bps"):
+        reading = getattr(b, name)
+        if reading is not None:
+            found += _later(f"market_backdrop.{name}.as_of", f"the {name.replace('_', ' ')} date", reading.as_of, b.as_of)
+    fg = b.fear_and_greed
+    if fg is not None:
+        band = next(label for limit, label in _FEAR_GREED_BANDS if fg.value < limit)
+        if fg.label.strip().lower() != band:
+            found.append(Problem("label_inconsistent", "market_backdrop.fear_and_greed",
+                                 f"Fear & Greed {fg.value:g} is {band}, not {fg.label!r}"))
+    return found
+
+
+_BUYS, _SELLS = ("Buy", "Overweight"), ("Sell", "Underweight")
+
+
+def check_prior_reports(reports: list[PriorReport], trade_date: date | None) -> list[Problem]:
+    found = []
+    for i, r in enumerate(reports):
+        path = f"prior_reports[{i}]"
+        if trade_date is not None and r.as_of >= trade_date:
+            found.append(Problem("prior_after_run", f"{path}.as_of",
+                                 f"a previous report dated {r.as_of} is not before the run date {trade_date}"))
+        if r.target is not None and ((r.decision in _BUYS and r.target <= r.price_then)
+                                     or (r.decision in _SELLS and r.target >= r.price_then)):
+            found.append(Problem("prior_target_inconsistent", f"{path}.target",
+                                 f"a {r.decision} with a target of {r.target} against a price of {r.price_then}"))
+    if any(a.as_of <= b.as_of for a, b in zip(reports, reports[1:], strict=False)):
+        found.append(Problem("prior_order", "prior_reports", "previous reports must be newest first"))
+    return found
+
+
 def check_events(e: Events) -> list[Problem]:
     found = []
     if e.next_earnings is not None and e.next_earnings.date <= e.as_of:
@@ -244,7 +407,8 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
     """Every problem with the context, including ties to the request when it is given."""
     found = []
     blocks = [("financials", context.financials), ("price", context.price), ("events", context.events),
-              ("company", context.company), ("technicals", context.technicals)]
+              ("company", context.company), ("technicals", context.technicals), ("ownership", context.ownership),
+              ("valuation_history", context.valuation_history)]
     if context.financials is not None:
         found += check_financials(context.financials)
     if context.events is not None:
@@ -253,6 +417,17 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
         found += check_company(context.company, context.price)
     if context.technicals is not None:
         found += check_technicals(context.technicals, context.price, trade_date)
+    if context.ownership is not None:
+        found += check_ownership(context.ownership)
+    if context.valuation_history is not None:
+        found += check_valuation(context.valuation_history)
+    if context.market_backdrop is not None:
+        found += check_backdrop(context.market_backdrop)
+    found += check_prior_reports(context.prior_reports, trade_date)
+    if ticker is not None:
+        found += [Problem("ticker_mismatch", f"prior_reports[{i}].ticker",
+                          f"a previous report is for {r.ticker}, but the request is for {ticker}")
+                  for i, r in enumerate(context.prior_reports) if r.ticker != ticker]
     if ticker is not None:
         found += [Problem("ticker_mismatch", f"{name}.ticker",
                           f"{name} is for {block.ticker}, but the request is for {ticker}")
@@ -265,6 +440,14 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
     if trade_date is not None:
         if context.price is not None:
             found += check_price(context.price, trade_date)
+        for name, block in (("valuation_history", context.valuation_history),
+                            ("market_backdrop", context.market_backdrop)):
+            if block is not None and block.as_of > trade_date:
+                found.append(Problem("as_of_after_trade_date", f"{name}.as_of",
+                                     f"the {name.replace('_', ' ')} is dated {block.as_of}, after the run date {trade_date}"))
+        if context.ownership is not None and context.ownership.as_of > trade_date:
+            found.append(Problem("as_of_after_trade_date", "ownership.as_of",
+                                 f"the ownership data is dated {context.ownership.as_of}, after the run date {trade_date}"))
         if context.company is not None and context.company.as_of > trade_date:
             found.append(Problem("as_of_after_trade_date", "company.as_of",
                                  f"the company data is dated {context.company.as_of}, after the run date {trade_date}"))

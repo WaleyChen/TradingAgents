@@ -394,3 +394,12 @@ def test_the_summary_switches_are_settable_from_the_environment(monkeypatch):
     monkeypatch.setenv("TRADINGAGENTS_SUMMARY_TIER", "quick")
     config = build_default_config()
     assert config["summary_reads_reports"] is False and config["summary_tier"] == "quick"
+
+
+@pytest.mark.unit
+def test_the_summary_is_asked_what_changed_since_the_last_report_without_being_anchored_on_it():
+    llm = StructuredLLM(_draft())
+    create_summary_node(llm)(STATE)
+    prompt = " ".join(llm.prompts[0].split())
+    assert "how the view has changed" in prompt and "toward or away from the old target" in prompt
+    assert "Do not let the previous rating decide the new one" in prompt

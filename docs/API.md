@@ -124,6 +124,38 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
     "macd": { "line": -38.89, "signal": -29.12, "histogram": -9.77 },
     "volume": 35400000, "volume_avg_50d": 21800000, "high_52w": 1213.56, "low_52w": 201.37
   },
+  "valuation_history": {
+    "ticker": "MU", "currency": "USD", "source": "getmarketalerts", "as_of": "2026-11-04",
+    "pe_ttm": { "latest": 21.5, "min_5y": 8.1, "median_5y": 14.2, "max_5y": 38.0, "percentile_5y": 0.88, "years": 5 },
+    "peg": 0.29
+  },
+  "market_backdrop": {
+    "source": "getmarketalerts", "as_of": "2026-11-04",
+    "vix": { "value": 22.4, "as_of": "2026-11-04" },
+    "fear_and_greed": { "value": 31, "label": "Fear", "as_of": "2026-11-04" },
+    "buffett_indicator_pct": { "value": 215, "as_of": "2026-09-30" },
+    "credit_spread_hy_bps": { "value": 310, "as_of": "2026-11-03" }
+  },
+  "prior_reports": [
+    { "ticker": "MU", "as_of": "2026-10-12", "decision": "Overweight", "target": 1100.0,
+      "price_then": 950.1, "horizon": "3-6 months" }
+  ],
+  "ownership": {
+    "ticker": "MU", "currency": "USD", "as_of": "2026-11-04",
+    "funds": { "source": "sec_13f", "quarter_end": "2026-09-30", "managers_tracked": 24,
+      "holders": [{ "manager": "David Tepper", "firm": "Appaloosa", "shares": 1200000, "value_usd": 954000000,
+                    "weight_pct": 4.1, "shares_change": 300000, "shares_change_pct": 33.3, "action": "added",
+                    "filed_on": "2026-10-30", "estimated_cost": 640.0 }] },
+    "insiders": { "source": "sec_form4", "window_days": 90, "buys": 0, "sells": 1, "net_value_usd": -4100000,
+      "trades": [{ "name": "Jane Doe", "title": "Director", "is_director": true,
+                   "transaction_date": "2026-10-02", "filing_date": "2026-10-04", "kind": "sale",
+                   "shares": 5000, "price_per_share": 820.0, "value_usd": 4100000,
+                   "shares_owned_after": 40000, "form_type": "4" }] },
+    "congress": { "source": "congress_disclosures", "window_days": 90, "buys": 1, "sells": 0,
+      "trades": [{ "member": "Dan Newhouse", "chamber": "House", "district": "WA04", "owner": "spouse",
+                   "side": "buy", "traded_on": "2026-07-10", "disclosed_on": "2026-08-15",
+                   "amount_min": 1001, "amount_max": 15000 }] }
+  },
   "company": {
     "ticker": "MU", "currency": "USD", "source": "financial_datasets", "as_of": "2026-11-04",
     "name": "Micron Technology, Inc.", "sector": "Technology", "industry": "Semiconductors",
@@ -171,12 +203,48 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   service's own. `close` must be within 0.5% of `price.close` when both are dated the same
   day; `macd.histogram` must be `line` less `signal`; `close` must lie inside the 52-week
   range; and `as_of` must be within 7 days before the run date.
+- `valuation_history` is the stock's P/E against its own past. `pe_ttm` is price over
+  trailing-twelve-month EPS; the service's own `pe_latest_annual` is price over the latest fiscal
+  year's diluted EPS. They are named apart and the agents are told never to mix them. The range
+  must be ordered and contain `latest`, and the percentile must fit where `latest` sits (a P/E at
+  the 5-year maximum cannot be at the 50th percentile). The fundamentals analyst reads it, and the
+  decision-makers read a one-line digest.
+- `market_backdrop` holds market-wide measures, each with its own `as_of`; none may be after the
+  block's. A `fear_and_greed` label must fit its value (0-24 Extreme Fear, 25-44 Fear, 45-55 Neutral,
+  56-75 Greed, 76-100 Extreme Greed). The news analyst reads it, and the agents are told to state
+  each reading's date and never call an older one current.
+- `prior_reports` (up to 3, newest first) are the service's own earlier outputs on this company; each
+  carries `ticker`, which must match the request. Only the summary reads them, so the analysts are not
+  anchored on an old rating. The summary says how the view changed, in plain labels ("Weak Buy"), and
+  the service works out in code how far the price has moved and whether that is toward or away from the
+  old target. A buy-side rating needs a target above `price_then` and a sell-side one below it. Each
+  report must be dated before the run date.
+- `ownership` has three optional parts: `funds` (13F positions, up to 10 holders), `insiders`
+  (Form 4 open-market buys and sales, up to 20 trades) and `congress` (up to 20 trades). Nothing may
+  be dated after `as_of`; the insider window runs on `transaction_date` and the Congress window on
+  `disclosed_on`, because disclosures lag. A holder's `action` must agree with the sign of
+  `shares_change` (`new`: the change is the whole position; `exited`: shares 0), and its percentage with
+  the shares. The `buys` and `sells` counts must cover every listed trade and equal the lists when fewer
+  than 20 are listed; `net_value_usd` is checked against the list only when the list is complete.
+  The agents are told: a 13F is a quarter-end position filed up to 45 days later, never "recent
+  buying"; funds cover only the managers you track ("of the funds we track"); `estimated_cost` is an
+  estimate; Congress amounts are ranges disclosed up to 45 days late; insider value counts open-market
+  trades only. Fund managers are named in the report; insiders are described by title and members of
+  Congress by chamber and relationship, never by name. The sentiment analyst reads the full block and the
+  decision-makers a one-line digest. Counts and totals can be cited as verified figures.
 - `company` gives the name, sector, industry, exchange, `market_cap` and
   `shares_outstanding` (all optional except the identity fields). With `price`, the market
   cap must be within 3% of price times shares, or the request is refused with
   `market_cap_mismatch`. `financials.balance[].total_debt` and
   `financials.annual|quarterly[].income.depreciation_and_amortization` are optional and
   unlock the metrics below; `total_debt` may not exceed `total_liabilities`.
+- If you send no `events.next_earnings`, the service looks up Yahoo's date for the next report
+  and, when it is after the run date, uses it as `next_earnings` with `confirmed: false`; the
+  agents are told it is Yahoo's estimate. This adds an `events` block with `source:
+  "yahoo_finance"` when you sent none, or fills only `next_earnings` when you sent `events`
+  without one. A date you send is never replaced. If the lookup fails or finds no future date,
+  nothing is added and earnings items stay undated. Set `TRADINGAGENTS_ESTIMATE_NEXT_EARNINGS=0`
+  to turn it off. `yahoo_finance` is also accepted as a `source`.
 - `events` gives the next earnings date and up to four recent reports (estimates may be
   `null`). When it is sent, a dated `plan.watch` item about reporting (one that mentions earnings,
   a print, results, guidance, a filing or 10-Q/10-K, a quarterly, annual or next report, or a
@@ -210,6 +278,16 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 | `technicals_price_mismatch` | `technicals.close` differs from `price.close` by over 0.5% on the same date |
 | `macd_inconsistent` | the MACD histogram is not the line less the signal |
 | `range_inconsistent` | the close is outside the supplied 52-week range |
+| `date_after_as_of` | a holder, trade or disclosure date, or a quarter end, is after the block's `as_of` |
+| `filed_before_period_end` | a 13F is dated before its quarter ended (also used for statements) |
+| `holder_change_inconsistent` / `managers_tracked_too_low` | a fund's action, shares and change disagree, or more holders are listed than tracked |
+| `filing_before_transaction` / `disclosed_before_traded` | a filing or disclosure predates its trade |
+| `trade_outside_window` / `trade_value_mismatch` | a trade falls outside its window, or its value is not shares times price |
+| `insider_count_mismatch` / `insider_net_mismatch` / `congress_count_mismatch` | counts or net value disagree with the listed trades |
+| `amount_range_inverted` | a Congress `amount_min` exceeds `amount_max` |
+| `valuation_range_inconsistent` / `percentile_inconsistent` | `pe_ttm` is unordered, outside its own range, or its percentile does not fit |
+| `label_inconsistent` | a Fear & Greed label does not fit its value |
+| `prior_after_run` / `prior_order` / `prior_target_inconsistent` | a previous report is not before the run, not newest first, or its target is on the wrong side of its price |
 | `price_date` | the price is after the run date or more than 7 days before it |
 
 A passing request is internally consistent. That does not make it true: the checks

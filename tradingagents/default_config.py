@@ -25,6 +25,7 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_REPORT_SUMMARY":       "report_summary",
     "TRADINGAGENTS_SUMMARY_READS_REPORTS": "summary_reads_reports",
     "TRADINGAGENTS_SUMMARY_TIER":         "summary_tier",
+    "TRADINGAGENTS_ESTIMATE_NEXT_EARNINGS": "estimate_next_earnings",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
@@ -143,6 +144,9 @@ def build_default_config() -> dict:
         # digests of them (cheaper); and which model tier writes it ("deep" or "quick").
         "summary_reads_reports": True,
         "summary_tier": "deep",
+        # Add Yahoo's next-earnings date, labelled as an estimate, when the caller sends none. Off for the
+        # CLI; the HTTP API turns it on.
+        "estimate_next_earnings": False,
         # Output language for analyst reports and final decision
         # Internal agent debate stays in English for reasoning quality
         "output_language": "English",

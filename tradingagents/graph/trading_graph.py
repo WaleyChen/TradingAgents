@@ -3,7 +3,7 @@ import json
 import logging
 import os
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +11,7 @@ import tradingagents
 from tradingagents.agents.context import build_instrument_context, resolve_instrument_identity
 from tradingagents.agents.rating import run_rating
 from tradingagents.context import Context
+from tradingagents.context.estimate import apply_estimate, estimate_next_earnings
 from tradingagents.context.render import render_role_blocks
 from tradingagents.dataflows.config import run_config, run_config_context, set_config
 from tradingagents.dataflows.date_window import get_current_date, is_historical
@@ -320,12 +321,17 @@ class TradingAgentsGraph:
         trade_date = _validate_trade_date(trade_date)
         instrument_context = self.resolve_instrument_context(company_name, asset_type, trade_date)
         supplied = self._supplied_context()   # the caller's checked data, split by who reads it
+        if self.config.get("estimate_next_earnings") and not (
+                supplied and supplied.events and supplied.events.next_earnings):
+            as_of = date.fromisoformat(trade_date)
+            supplied = apply_estimate(supplied, company_name, as_of, estimate_next_earnings(company_name, as_of))
         return self.propagator.create_initial_state(
             company_name,
             trade_date,
             asset_type=asset_type,
             instrument_context=instrument_context,
             verified_blocks=render_role_blocks(supplied) if supplied else {},
+            run_context=supplied.model_dump(mode="json") if supplied else None,
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
         )
 

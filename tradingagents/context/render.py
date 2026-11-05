@@ -4,16 +4,25 @@ from __future__ import annotations
 
 import re
 
-from tradingagents.context.derive import derive_metrics, derive_technicals
+from tradingagents.context.derive import (
+    derive_metrics,
+    derive_ownership,
+    derive_prior_reports,
+    derive_technicals,
+)
 from tradingagents.context.models import (
     Balance,
     Company,
     Context,
     Events,
     Financials,
+    MarketBackdrop,
+    Ownership,
     Price,
+    PriorReport,
     Statement,
     Technicals,
+    ValuationHistory,
 )
 
 _GUIDANCE = (
@@ -36,7 +45,7 @@ _METRICS = (
     ("ev_to_ebitda", "EV to EBITDA", "{:.1f}x"),
     ("debt_to_equity", "debt to equity", "{:.2f}"),
     ("fcf_yield_pct", "free cash flow yield", "{:.1f}%"),
-    ("pe_latest_annual", "price-to-earnings (price over latest annual diluted EPS)", "{:.1f}"),
+    ("pe_latest_annual", "price-to-earnings on the latest fiscal year's diluted EPS", "{:.1f}"),
     ("ttm_revenue", "trailing four-quarter revenue", None),
 )
 _TAGS = re.compile(r"</?notes>", re.IGNORECASE)
@@ -104,6 +113,148 @@ def _technicals(t: Technicals) -> list[str]:
     return lines
 
 
+def _name(text: str) -> str:
+    """A name as one plain line: no markdown structure from a field the caller wrote."""
+    return re.sub(r"^[#>*\-\s]+", "", " ".join(text.split()))
+
+
+def _article(word: str) -> str:
+    return "an" if word[:1].lower() in "aeiou" else "a"
+
+
+_CHANGE = {"new": "new position", "unchanged": "unchanged", "exited": "exited the position"}
+
+
+def _holder(h) -> str:
+    who = f"{_name(h.firm)} ({_name(h.manager)})" if h.firm else _name(h.manager)
+    size = f"{h.shares:,} shares" + (f" ({_money(h.value_usd)}" + (f", {h.weight_pct:g}% of its portfolio)"
+                                     if h.weight_pct is not None else ")") if h.value_usd is not None else "")
+    if h.action in ("added", "trimmed") and h.shares_change is not None:
+        pct = f" ({h.shares_change_pct:+.1f}%)" if h.shares_change_pct is not None else ""
+        change = f"{h.action} {abs(h.shares_change):,} shares{pct}"
+    else:
+        change = _CHANGE.get(h.action, h.action)
+    cost = (f"; estimated average cost ${h.estimated_cost:,.2f} (an estimate: a 13F does not say what a fund paid)"
+            if h.estimated_cost is not None else "")
+    return f"- {who}: {size}; {change}; filed {h.filed_on}{cost}"
+
+
+def _insider(t) -> str:
+    verb = "bought" if t.kind == "buy" else "sold"
+    value = f" ({_money(t.value_usd)})" if t.value_usd is not None else ""
+    after = f"; owns {t.shares_owned_after:,} shares after" if t.shares_owned_after is not None else ""
+    title = _name(t.title)
+    return (f"- {t.transaction_date}: {_article(title)} {title} {verb} {t.shares:,} shares at "
+            f"${t.price_per_share:,.2f}{value}; filed {t.filing_date}{after}")
+
+
+_OWNER = {"self": "", "spouse": "'s spouse", "dependent": "'s dependent", "joint": " (joint account)"}
+
+
+def _congress_trade(t) -> str:
+    verb = "bought" if t.side == "buy" else "sold"
+    return (f"- {t.traded_on} (disclosed {t.disclosed_on}): a {t.chamber} member{_OWNER[t.owner]} {verb} "
+            f"${t.amount_min:,}-${t.amount_max:,}")
+
+
+def _ownership(o: Ownership) -> list[str]:
+    lines = [f"Ownership for {o.ticker} (as of {o.as_of}):"]
+    if o.funds is not None:
+        f = o.funds
+        lines.append(
+            f"Funds (source {f.source}): 13F positions as of the quarter ended {f.quarter_end}, filed up to 45 days "
+            f"later, so this is not recent buying. It covers only the {f.managers_tracked} managers we track: say "
+            '"of the funds we track", never "funds are buying".')
+        lines += [_holder(h) for h in f.holders]
+    if o.insiders is not None:
+        i = o.insiders
+        net = f", net {_money(i.net_value_usd)}" if i.net_value_usd is not None else ""
+        lines.append(f"Insiders (source {i.source}): the last {i.window_days} days to {o.as_of}, open-market buys "
+                     f"and sales only (no grants, exercises or gifts). {i.buys} buys, {i.sells} sells{net}.")
+        lines += [_insider(t) for t in i.trades]
+    if o.congress is not None:
+        c = o.congress
+        lines.append(f"Congress (source {c.source}): disclosed in the last {c.window_days} days to {o.as_of}. "
+                     f"Amounts are ranges, and trades are disclosed up to 45 days after they happen. "
+                     f"{c.buys} buys, {c.sells} sells.")
+        lines += [_congress_trade(t) for t in c.trades]
+    return lines
+
+
+def _ownership_digest(o: Ownership) -> list[str]:
+    m, lines = derive_ownership(o), []
+    if o.insiders is not None:
+        net = f", net {_money(o.insiders.net_value_usd)}" if o.insiders.net_value_usd is not None else ""
+        lines.append(f"Insiders (open-market): {m['insider_buys']} insider buys and {m['insider_sells']} insider "
+                     f"sales in {m['insider_window_days']} days{net}.")
+    if o.funds is not None:
+        lines.append(
+            f"Funds (13F, quarter ended {o.funds.quarter_end}; not recent): of the funds we track "
+            f"({m['funds_managers_tracked']} managers), among the {m['funds_listed']} largest holders listed, "
+            f"{m['funds_added']} added, {m['funds_new']} new, {m['funds_trimmed']} trimmed, {m['funds_exited']} exited.")
+    if o.congress is not None:
+        lines.append(f"Congress (disclosed up to 45 days late): {m['congress_buys']} buys and "
+                     f"{m['congress_sells']} sells disclosed in {m['congress_window_days']} days.")
+    return lines
+
+
+def _ordinal(n: int) -> str:
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def _valuation(v: ValuationHistory) -> list[str]:
+    lines = [f"Valuation history for {v.ticker} (source {v.source}, as of {v.as_of}):"]
+    pe = v.pe_ttm
+    if pe is not None:
+        text = f"price-to-earnings on trailing-twelve-month EPS is {pe.latest:g}x now"
+        if pe.min_5y is not None and pe.max_5y is not None:
+            text += f"; over the last {pe.years or 5} years it ranged {pe.min_5y:.1f}x-{pe.max_5y:.1f}x"
+        if pe.median_5y is not None:
+            text += f", with a median of {pe.median_5y:.1f}x"
+        if pe.percentile_5y is not None:
+            text += f", so today sits at the {_ordinal(round(pe.percentile_5y * 100))} percentile of that range"
+        lines.append(text + ".")
+    if v.peg is not None:
+        lines.append(f"PEG {v.peg:g}.")
+    lines.append("This is not the same figure as price over the latest fiscal year's diluted EPS; never mix the "
+                 "two in the text.")
+    return lines
+
+
+def _backdrop(b: MarketBackdrop) -> list[str]:
+    parts = []
+    if b.vix is not None:
+        parts.append(f"VIX {b.vix.value:g} (as of {b.vix.as_of})")
+    if b.fear_and_greed is not None:
+        fg = b.fear_and_greed
+        parts.append(f"Fear & Greed {fg.value:g}, {' '.join(fg.label.split())} (as of {fg.as_of})")
+    if b.buffett_indicator_pct is not None:
+        parts.append(f"Buffett indicator {b.buffett_indicator_pct.value:g}% (as of {b.buffett_indicator_pct.as_of})")
+    if b.credit_spread_hy_bps is not None:
+        s = b.credit_spread_hy_bps
+        parts.append(f"high-yield credit spread {s.value:g} basis points (as of {s.as_of})")
+    if not parts:
+        return []
+    return [f"Market backdrop (source {b.source}, as of {b.as_of}): " + "; ".join(parts) + ".",
+            "These measure the market, not this company. Each updates on its own day: state each date and do "
+            "not call an older reading current."]
+
+
+def _prior(reports: list[PriorReport], price: float | None) -> list[str]:
+    lines = ["Previous reports (our own earlier outputs on this company, newest first):"]
+    for row in derive_prior_reports(reports, price):
+        target = f", target ${row['target']:,.2f}" if row["target"] is not None else ", no target"
+        horizon = f" over {row['horizon']}" if row["horizon"] else ""
+        text = f"- {row['as_of']}: {row['decision_label']}{target}, price then ${row['price_then']:,.2f}{horizon}."
+        if row["price_change_pct"] is not None:
+            text += f" Since then the price is ${price:,.2f} ({row['price_change_pct']:+.1f}%)"
+            move = {"toward": " and moving toward that target", "away": " and moving away from that target",
+                    "reached": " and has reached that target"}.get(row["direction_to_target"], "")
+            text += move + "."
+        lines.append(text)
+    return lines
+
+
 def _company(c: Company) -> list[str]:
     name = " ".join(c.name.split()) if c.name else c.ticker
     where = ", ".join(" ".join(x.split()) for x in (c.exchange, c.sector, c.industry) if x)
@@ -135,7 +286,8 @@ def _events(e: Events) -> list[str]:
         lines.append("Next earnings: not supplied. Do not state or guess an earnings date.")
     else:
         state = "confirmed" if nxt.confirmed else "not confirmed"
-        lines.append(f"Next earnings: {nxt.date} ({nxt.fiscal_period}, {state}). This is the only date "
+        estimate = "; estimated by Yahoo Finance" if e.source == "yahoo_finance" else ""
+        lines.append(f"Next earnings: {nxt.date} ({nxt.fiscal_period}, {state}{estimate}). This is the only date "
                      "you may give for the next earnings report.")
     for r in e.recent_earnings:
         values = []
@@ -186,6 +338,14 @@ def _digest(context: Context) -> list[str]:
         nxt = context.events.next_earnings
         lines.append(f"Next earnings: {nxt.date} ({nxt.fiscal_period}, "
                      f"{'confirmed' if nxt.confirmed else 'not confirmed'}); the only date you may give.")
+    if context.ownership is not None:
+        lines += _ownership_digest(context.ownership)
+    pe = context.valuation_history.pe_ttm if context.valuation_history else None
+    if pe is not None:
+        where = (f", at the {_ordinal(round(pe.percentile_5y * 100))} percentile of its {pe.years or 5}-year range "
+                 f"({pe.min_5y:.1f}x-{pe.max_5y:.1f}x)" if pe.percentile_5y is not None
+                 and pe.min_5y is not None and pe.max_5y is not None else "")
+        lines.append(f"Price-to-earnings on trailing-twelve-month EPS: {pe.latest:g}x{where}.")
     return lines if len(lines) > 1 else []
 
 
@@ -200,9 +360,12 @@ def render_role_blocks(context: Context) -> dict[str, str]:
     fin = _financials(c.financials, c.price, c.company) if c.financials else []
     price = [_price_line(c.price)] if c.price else []
     plan["market"] = [*(_technicals(c.technicals) if c.technicals else []), *price]
-    plan["news"] = _events(c.events) if c.events else []
-    plan["fundamentals"] = [*fin, *(_company(c.company) if c.company else []),
+    plan["news"] = [*(_events(c.events) if c.events else []),
+                    *(_backdrop(c.market_backdrop) if c.market_backdrop else [])]
+    plan["fundamentals"] = [*fin, *(_valuation(c.valuation_history) if c.valuation_history else []),
+                            *(_company(c.company) if c.company else []),
                             *(_events(c.events) if c.events else []), *price, *notes]
+    plan["sentiment"] = _ownership(c.ownership) if c.ownership else []
     plan["decision"] = [*_digest(c), *notes] if _digest(c) else []
     return {role: "\n".join([_GUIDANCE, "", *lines]) for role, lines in plan.items() if lines}
 
@@ -215,10 +378,19 @@ def render_context(context: Context) -> str:
         lines += ["", *_technicals(context.technicals)]
     if context.company is not None:
         lines += ["", *_company(context.company)]
+    if context.ownership is not None:
+        lines += ["", *_ownership(context.ownership)]
+    if context.valuation_history is not None:
+        lines += ["", *_valuation(context.valuation_history)]
+    if context.market_backdrop is not None and _backdrop(context.market_backdrop):
+        lines += ["", *_backdrop(context.market_backdrop)]
     if context.events is not None:
         lines += ["", *_events(context.events)]
     if context.price is not None:
         lines += ["", _price_line(context.price)]
+    if context.prior_reports:
+        now = context.price.close if context.price else context.technicals.close if context.technicals else None
+        lines += ["", *_prior(context.prior_reports, now)]
     if context.notes:
         lines += ["", *_notes_lines(context.notes)]
     return "\n".join(lines)

@@ -75,7 +75,11 @@
           "enum": [
             "sec_xbrl",
             "financial_datasets",
-            "getmarketalerts"
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
           ],
           "title": "Source",
           "type": "string"
@@ -282,7 +286,11 @@
           "enum": [
             "sec_xbrl",
             "financial_datasets",
-            "getmarketalerts"
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
           ],
           "title": "Source",
           "type": "string"
@@ -301,6 +309,135 @@
         "as_of"
       ],
       "title": "Company",
+      "type": "object"
+    },
+    "Congress": {
+      "additionalProperties": false,
+      "properties": {
+        "buys": {
+          "exclusiveMaximum": 1000000000,
+          "minimum": 0,
+          "title": "Buys",
+          "type": "integer"
+        },
+        "sells": {
+          "exclusiveMaximum": 1000000000,
+          "minimum": 0,
+          "title": "Sells",
+          "type": "integer"
+        },
+        "source": {
+          "const": "congress_disclosures",
+          "title": "Source",
+          "type": "string"
+        },
+        "trades": {
+          "items": {
+            "$ref": "#/$defs/CongressTrade"
+          },
+          "maxItems": 20,
+          "title": "Trades",
+          "type": "array"
+        },
+        "window_days": {
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source",
+        "window_days",
+        "buys",
+        "sells"
+      ],
+      "title": "Congress",
+      "type": "object"
+    },
+    "CongressTrade": {
+      "additionalProperties": false,
+      "properties": {
+        "amount_max": {
+          "exclusiveMaximum": 1000000000000,
+          "minimum": 0,
+          "title": "Amount Max",
+          "type": "integer"
+        },
+        "amount_min": {
+          "exclusiveMaximum": 1000000000000,
+          "minimum": 0,
+          "title": "Amount Min",
+          "type": "integer"
+        },
+        "chamber": {
+          "enum": [
+            "House",
+            "Senate"
+          ],
+          "title": "Chamber",
+          "type": "string"
+        },
+        "disclosed_on": {
+          "format": "date",
+          "title": "Disclosed On",
+          "type": "string"
+        },
+        "district": {
+          "anyOf": [
+            {
+              "maxLength": 10,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "District"
+        },
+        "member": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Member",
+          "type": "string"
+        },
+        "owner": {
+          "enum": [
+            "self",
+            "spouse",
+            "dependent",
+            "joint"
+          ],
+          "title": "Owner",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "buy",
+            "sell"
+          ],
+          "title": "Side",
+          "type": "string"
+        },
+        "traded_on": {
+          "format": "date",
+          "title": "Traded On",
+          "type": "string"
+        }
+      },
+      "required": [
+        "member",
+        "chamber",
+        "owner",
+        "side",
+        "traded_on",
+        "disclosed_on",
+        "amount_min",
+        "amount_max"
+      ],
+      "title": "CongressTrade",
       "type": "object"
     },
     "EarningsReport": {
@@ -425,7 +562,11 @@
           "enum": [
             "sec_xbrl",
             "financial_datasets",
-            "getmarketalerts"
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
           ],
           "title": "Source",
           "type": "string"
@@ -444,6 +585,35 @@
         "as_of"
       ],
       "title": "Events",
+      "type": "object"
+    },
+    "FearGreed": {
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 30,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "value": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "label",
+        "as_of"
+      ],
+      "title": "FearGreed",
       "type": "object"
     },
     "Financials": {
@@ -509,6 +679,181 @@
         "as_of"
       ],
       "title": "Financials",
+      "type": "object"
+    },
+    "FundHolder": {
+      "additionalProperties": false,
+      "description": "One tracked manager's 13F position at the quarter end.",
+      "properties": {
+        "action": {
+          "enum": [
+            "new",
+            "added",
+            "trimmed",
+            "exited",
+            "unchanged"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "estimated_cost": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Cost"
+        },
+        "filed_on": {
+          "format": "date",
+          "title": "Filed On",
+          "type": "string"
+        },
+        "firm": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Firm"
+        },
+        "manager": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Manager",
+          "type": "string"
+        },
+        "shares": {
+          "exclusiveMaximum": 10000000000000,
+          "minimum": 0,
+          "title": "Shares",
+          "type": "integer"
+        },
+        "shares_change": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000000000,
+              "exclusiveMinimum": -10000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shares Change"
+        },
+        "shares_change_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": -100.01,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shares Change Pct"
+        },
+        "value_usd": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Usd"
+        },
+        "weight_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weight Pct"
+        }
+      },
+      "required": [
+        "manager",
+        "shares",
+        "action",
+        "filed_on"
+      ],
+      "title": "FundHolder",
+      "type": "object"
+    },
+    "Funds": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Coverage"
+        },
+        "holders": {
+          "items": {
+            "$ref": "#/$defs/FundHolder"
+          },
+          "maxItems": 10,
+          "title": "Holders",
+          "type": "array"
+        },
+        "managers_tracked": {
+          "exclusiveMaximum": 1000000,
+          "minimum": 1,
+          "title": "Managers Tracked",
+          "type": "integer"
+        },
+        "quarter_end": {
+          "format": "date",
+          "title": "Quarter End",
+          "type": "string"
+        },
+        "source": {
+          "const": "sec_13f",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "quarter_end",
+        "managers_tracked"
+      ],
+      "title": "Funds",
       "type": "object"
     },
     "Income": {
@@ -616,6 +961,162 @@
       "title": "Income",
       "type": "object"
     },
+    "InsiderTrade": {
+      "additionalProperties": false,
+      "properties": {
+        "filing_date": {
+          "format": "date",
+          "title": "Filing Date",
+          "type": "string"
+        },
+        "form_type": {
+          "maxLength": 10,
+          "minLength": 1,
+          "title": "Form Type",
+          "type": "string"
+        },
+        "is_director": {
+          "title": "Is Director",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "buy",
+            "sale"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "price_per_share": {
+          "exclusiveMaximum": 10000000.0,
+          "exclusiveMinimum": 0,
+          "title": "Price Per Share",
+          "type": "number"
+        },
+        "shares": {
+          "exclusiveMaximum": 10000000000000,
+          "exclusiveMinimum": 0,
+          "title": "Shares",
+          "type": "integer"
+        },
+        "shares_owned_after": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shares Owned After"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "transaction_date": {
+          "format": "date",
+          "title": "Transaction Date",
+          "type": "string"
+        },
+        "value_usd": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value Usd"
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "is_director",
+        "transaction_date",
+        "filing_date",
+        "kind",
+        "shares",
+        "price_per_share",
+        "form_type"
+      ],
+      "title": "InsiderTrade",
+      "type": "object"
+    },
+    "Insiders": {
+      "additionalProperties": false,
+      "properties": {
+        "buys": {
+          "exclusiveMaximum": 1000000000,
+          "minimum": 0,
+          "title": "Buys",
+          "type": "integer"
+        },
+        "net_value_usd": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Value Usd"
+        },
+        "sells": {
+          "exclusiveMaximum": 1000000000,
+          "minimum": 0,
+          "title": "Sells",
+          "type": "integer"
+        },
+        "source": {
+          "const": "sec_form4",
+          "title": "Source",
+          "type": "string"
+        },
+        "trades": {
+          "items": {
+            "$ref": "#/$defs/InsiderTrade"
+          },
+          "maxItems": 20,
+          "title": "Trades",
+          "type": "array"
+        },
+        "window_days": {
+          "maximum": 365,
+          "minimum": 1,
+          "title": "Window Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source",
+        "window_days",
+        "buys",
+        "sells"
+      ],
+      "title": "Insiders",
+      "type": "object"
+    },
     "Macd": {
       "additionalProperties": false,
       "properties": {
@@ -665,6 +1166,80 @@
       "title": "Macd",
       "type": "object"
     },
+    "MarketBackdrop": {
+      "additionalProperties": false,
+      "description": "Market-wide measures, each with its own date because they update on different days.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "buffett_indicator_pct": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reading"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "credit_spread_hy_bps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reading"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "fear_and_greed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FearGreed"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "vix": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reading"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "source",
+        "as_of"
+      ],
+      "title": "MarketBackdrop",
+      "type": "object"
+    },
     "NextEarnings": {
       "additionalProperties": false,
       "properties": {
@@ -692,6 +1267,155 @@
       "title": "NextEarnings",
       "type": "object"
     },
+    "Ownership": {
+      "additionalProperties": false,
+      "description": "Who holds and trades the stock, with the dates that say how old each fact is.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "congress": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Congress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "funds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Funds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "insiders": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Insiders"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "as_of"
+      ],
+      "title": "Ownership",
+      "type": "object"
+    },
+    "PeTtm": {
+      "additionalProperties": false,
+      "description": "Price over trailing-twelve-month EPS now, and over the last few years.",
+      "properties": {
+        "latest": {
+          "exclusiveMaximum": 100000.0,
+          "exclusiveMinimum": 0,
+          "title": "Latest",
+          "type": "number"
+        },
+        "max_5y": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 100000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max 5Y"
+        },
+        "median_5y": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 100000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Median 5Y"
+        },
+        "min_5y": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 100000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min 5Y"
+        },
+        "percentile_5y": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Percentile 5Y"
+        },
+        "years": {
+          "anyOf": [
+            {
+              "maximum": 30,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Years"
+        }
+      },
+      "required": [
+        "latest"
+      ],
+      "title": "PeTtm",
+      "type": "object"
+    },
     "Price": {
       "additionalProperties": false,
       "description": "A verified closing price, so the service can derive valuation ratios.",
@@ -716,7 +1440,11 @@
           "enum": [
             "sec_xbrl",
             "financial_datasets",
-            "getmarketalerts"
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
           ],
           "title": "Source",
           "type": "string"
@@ -736,6 +1464,98 @@
         "close"
       ],
       "title": "Price",
+      "type": "object"
+    },
+    "PriorReport": {
+      "additionalProperties": false,
+      "description": "One of our own earlier reports on this company.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "decision": {
+          "enum": [
+            "Buy",
+            "Overweight",
+            "Hold",
+            "Underweight",
+            "Sell"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "horizon": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Horizon"
+        },
+        "price_then": {
+          "exclusiveMaximum": 10000000.0,
+          "exclusiveMinimum": 0,
+          "title": "Price Then",
+          "type": "number"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "as_of",
+        "decision",
+        "price_then"
+      ],
+      "title": "PriorReport",
+      "type": "object"
+    },
+    "Reading": {
+      "additionalProperties": false,
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "value": {
+          "exclusiveMaximum": 1000000.0,
+          "minimum": 0,
+          "title": "Value",
+          "type": "number"
+        }
+      },
+      "required": [
+        "value",
+        "as_of"
+      ],
+      "title": "Reading",
       "type": "object"
     },
     "Statement": {
@@ -814,7 +1634,11 @@
           "enum": [
             "sec_xbrl",
             "financial_datasets",
-            "getmarketalerts"
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
           ],
           "title": "Source",
           "type": "string"
@@ -962,7 +1786,11 @@
           "enum": [
             "sec_xbrl",
             "financial_datasets",
-            "getmarketalerts"
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
           ],
           "title": "Source",
           "type": "string"
@@ -1011,6 +1839,74 @@
       ],
       "title": "Technicals",
       "type": "object"
+    },
+    "ValuationHistory": {
+      "additionalProperties": false,
+      "description": "The stock's valuation against its own past.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "pe_ttm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PeTtm"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "peg": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000,
+              "exclusiveMinimum": -1000,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Peg"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "source",
+        "as_of"
+      ],
+      "title": "ValuationHistory",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -1049,6 +1945,17 @@
       ],
       "default": null
     },
+    "market_backdrop": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MarketBackdrop"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "notes": {
       "anyOf": [
         {
@@ -1063,6 +1970,17 @@
       "description": "Free text. Unverified: context only, never a source for a figure.",
       "title": "Notes"
     },
+    "ownership": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Ownership"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "price": {
       "anyOf": [
         {
@@ -1074,6 +1992,14 @@
       ],
       "default": null
     },
+    "prior_reports": {
+      "items": {
+        "$ref": "#/$defs/PriorReport"
+      },
+      "maxItems": 3,
+      "title": "Prior Reports",
+      "type": "array"
+    },
     "schema_version": {
       "const": 1,
       "default": 1,
@@ -1084,6 +2010,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/Technicals"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "valuation_history": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ValuationHistory"
         },
         {
           "type": "null"
