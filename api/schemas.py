@@ -92,7 +92,7 @@ class SummaryFigure(BaseModel):
     label: str
     value: float
     unit: Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
-    source: Literal["context", "readings", "plan", "analyst_report", "derived"]
+    source: Literal["context", "readings", "plan", "filing", "analyst_report", "derived"]
     period: str | None = None
     verified: bool = Field(
         description="True only when the figure was checked in code against the supplied context, "

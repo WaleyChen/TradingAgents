@@ -33,6 +33,8 @@ def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
         config["structured_plan"] = True  # the API returns a checked plan unless told not to
     if "TRADINGAGENTS_REPORT_SUMMARY" not in os.environ:
         config["report_summary"] = True  # and a short summary
+    if "TRADINGAGENTS_RELEASE_NOTES" not in os.environ:
+        config["release_notes"] = True  # read an earnings release the caller sends
     if "TRADINGAGENTS_ESTIMATE_NEXT_EARNINGS" not in os.environ:
         config["estimate_next_earnings"] = True  # Yahoo's date, labelled an estimate, when none is sent
     if "TRADINGAGENTS_SUMMARY_READS_REPORTS" not in os.environ:

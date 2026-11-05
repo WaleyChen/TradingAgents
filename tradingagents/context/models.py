@@ -25,7 +25,7 @@ MAX_LABEL = 40
 MAX_NOTES = 4000
 
 Source = Literal["sec_xbrl", "financial_datasets", "getmarketalerts", "yahoo_finance", "sec_13f", "sec_form4",
-                 "congress_disclosures"]
+                 "congress_disclosures", "sec_edgar"]
 Amount = Annotated[int | None, Field(default=None, gt=-MAX_AMOUNT, lt=MAX_AMOUNT)]
 PerShare = Annotated[float | None, Field(default=None, gt=-1e6, lt=1e6)]
 Label = Annotated[str, Field(min_length=1, max_length=MAX_LABEL)]
@@ -324,6 +324,25 @@ class PriorReport(_Company):
     horizon: Annotated[str, Field(min_length=1, max_length=40)] | None = None
 
 
+class EarningsRelease(_Company):
+    """The company's earnings press release (8-K Exhibit 99.1) as plain text, for the service to read."""
+
+    source: Literal["sec_edgar"]
+    form: Literal["8-K", "6-K"]
+    filed_on: date
+    period_end: date | None = None
+    accession: Annotated[str, Field(pattern=r"^\d{10}-\d{2}-\d{6}$")]
+    url: Annotated[str, Field(max_length=300)]
+    text: Annotated[str, Field(min_length=500, max_length=120_000)]
+
+    @field_validator("url")
+    @classmethod
+    def sec_archive_only(cls, value: str) -> str:
+        if not value.startswith("https://www.sec.gov/Archives/"):
+            raise ValueError("url must start with https://www.sec.gov/Archives/")
+        return value
+
+
 class Context(_Strict):
     """What a caller supplies with a request. Only the blocks defined here are accepted."""
 
@@ -337,5 +356,6 @@ class Context(_Strict):
     valuation_history: ValuationHistory | None = None
     market_backdrop: MarketBackdrop | None = None
     prior_reports: list[PriorReport] = Field(default_factory=list, max_length=3)
+    earnings_release: EarningsRelease | None = None
     notes: str | None = Field(default=None, max_length=MAX_NOTES,
                               description="Free text. Unverified: context only, never a source for a figure.")

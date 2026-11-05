@@ -137,3 +137,11 @@ def test_an_undeclared_figure_is_a_warning_and_a_false_claim_of_verification_is_
     assert [(p.code, p.severity) for p in stray if p.code == "undeclared_figure"] == [("undeclared_figure", "warning")]
     false = check_summary(draft("Net margin 70.0%.", fig(70.0, "pct", "context")), KNOWN)
     assert [(p.code, p.severity) for p in false] == [("figure_not_in_source", "error")]
+
+
+@pytest.mark.unit
+def test_scale_words_are_read_in_any_case():
+    for text in ("a $450 Million charge", "a $450 MILLION charge", "a $450 million charge", "a $0.45 billion charge",
+                 "a $450M charge"):
+        found = [v for kind, v, _ in figures_in_text(text) if kind == "usd"]
+        assert found and abs(found[0] - 450e6) < 1e6, text

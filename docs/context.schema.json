@@ -79,7 +79,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -290,7 +291,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -440,6 +442,76 @@
       "title": "CongressTrade",
       "type": "object"
     },
+    "EarningsRelease": {
+      "additionalProperties": false,
+      "description": "The company's earnings press release (8-K Exhibit 99.1) as plain text, for the service to read.",
+      "properties": {
+        "accession": {
+          "pattern": "^\\d{10}-\\d{2}-\\d{6}$",
+          "title": "Accession",
+          "type": "string"
+        },
+        "filed_on": {
+          "format": "date",
+          "title": "Filed On",
+          "type": "string"
+        },
+        "form": {
+          "enum": [
+            "8-K",
+            "6-K"
+          ],
+          "title": "Form",
+          "type": "string"
+        },
+        "period_end": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period End"
+        },
+        "source": {
+          "const": "sec_edgar",
+          "title": "Source",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 120000,
+          "minLength": 500,
+          "title": "Text",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 300,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "source",
+        "form",
+        "filed_on",
+        "accession",
+        "url",
+        "text"
+      ],
+      "title": "EarningsRelease",
+      "type": "object"
+    },
     "EarningsReport": {
       "additionalProperties": false,
       "description": "One reported quarter. Estimates may be null: not every feed has them.",
@@ -566,7 +638,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -1240,7 +1313,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -1468,7 +1542,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -1662,7 +1737,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -1814,7 +1890,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -1911,7 +1988,8 @@
             "yahoo_finance",
             "sec_13f",
             "sec_form4",
-            "congress_disclosures"
+            "congress_disclosures",
+            "sec_edgar"
           ],
           "title": "Source",
           "type": "string"
@@ -1940,6 +2018,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/Company"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "earnings_release": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EarningsRelease"
         },
         {
           "type": "null"

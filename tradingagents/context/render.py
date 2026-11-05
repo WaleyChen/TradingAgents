@@ -267,6 +267,34 @@ def _prior(reports: list[PriorReport], price: float | None) -> list[str]:
     return lines
 
 
+_RELEASE_KIND = {"one_time_charge": "one-time charge", "one_time_gain": "one-time gain",
+                 "explanation": "the company's explanation", "guidance": "guidance"}
+
+
+def _release_item(item: dict) -> str:
+    amount = f" {_money(item['amount_usd'])}" if item.get("amount_usd") is not None else ""
+    return (f"- {_name(item['label'])}: {_RELEASE_KIND.get(item['kind'], item['kind'])}{amount}. "
+            f"{_name(item['explanation'])} The release says: \"{_name(item['quote']).replace(chr(34), chr(39))}\"")
+
+
+def _release(notes: dict) -> list[str]:
+    if not notes or not notes.get("items"):
+        return []
+    return [f"Latest earnings release (SEC {notes['form']} filed {notes['filed_on']}, accession {notes['accession']}): "
+            "the notable items below were read from it, each with the company's own words. Where the release "
+            "explains a change, use its explanation.",
+            *(_release_item(item) for item in notes["items"])]
+
+
+def _release_digest(notes: dict) -> list[str]:
+    if not notes or not notes.get("items"):
+        return []
+    items = ", ".join(
+        f"{_name(i['label'])} ({_RELEASE_KIND.get(i['kind'], i['kind'])}"
+        + (f", {_money(i['amount_usd'])}" if i.get("amount_usd") is not None else "") + ")" for i in notes["items"])
+    return [f"Earnings release ({notes['form']} filed {notes['filed_on']}): {items}."]
+
+
 def _company(c: Company) -> list[str]:
     name = " ".join(c.name.split()) if c.name else c.ticker
     where = ", ".join(" ".join(x.split()) for x in (c.exchange, c.sector, c.industry) if x)
@@ -333,7 +361,7 @@ def _computed_metrics(f: Financials, price: Price | None, company: Company | Non
     return "Computed metrics: " + "; ".join(shown) + "." if shown else None
 
 
-def _digest(context: Context) -> list[str]:
+def _digest(context: Context, release_notes: dict | None = None) -> list[str]:
     """The headline facts, so the agents that weigh everything agree with the analysts' numbers."""
     lines = ["Key verified facts (computed and checked by the service; use them as given):"]
     if context.price is not None:
@@ -352,6 +380,7 @@ def _digest(context: Context) -> list[str]:
                      f"{'confirmed' if nxt.confirmed else 'not confirmed'}); the only date you may give.")
     if context.ownership is not None:
         lines += _ownership_digest(context.ownership)
+    lines += _release_digest(release_notes)
     pe = context.valuation_history.pe_ttm if context.valuation_history else None
     if pe is not None:
         where = (f", at the {_ordinal(round(pe.percentile_5y * 100))} percentile of its {pe.years or 5}-year range "
@@ -361,7 +390,7 @@ def _digest(context: Context) -> list[str]:
     return lines if len(lines) > 1 else []
 
 
-def render_role_blocks(context: Context) -> dict[str, str]:
+def render_role_blocks(context: Context, release_notes: dict | None = None) -> dict[str, str]:
     """What each kind of agent reads: only the blocks it uses, and a short digest for the deciders.
 
     Every call an agent makes resends its block, so the full context is not given to all of them.
@@ -374,15 +403,15 @@ def render_role_blocks(context: Context) -> dict[str, str]:
     plan["market"] = [*(_technicals(c.technicals) if c.technicals else []), *price]
     plan["news"] = [*(_events(c.events) if c.events else []),
                     *(_backdrop(c.market_backdrop) if c.market_backdrop else [])]
-    plan["fundamentals"] = [*fin, *(_valuation(c.valuation_history) if c.valuation_history else []),
+    plan["fundamentals"] = [*fin, *_release(release_notes), *(_valuation(c.valuation_history) if c.valuation_history else []),
                             *(_company(c.company) if c.company else []),
                             *(_events(c.events) if c.events else []), *price, *notes]
     plan["sentiment"] = _ownership(c.ownership) if c.ownership else []
-    plan["decision"] = [*_digest(c), *notes] if _digest(c) else []
+    plan["decision"] = [*_digest(c, release_notes), *notes] if _digest(c, release_notes) else []
     return {role: "\n".join([_GUIDANCE, "", *lines]) for role, lines in plan.items() if lines}
 
 
-def render_context(context: Context) -> str:
+def render_context(context: Context, release_notes: dict | None = None) -> str:
     lines = [_GUIDANCE]
     if context.financials is not None:
         lines += ["", *_financials(context.financials, context.price, context.company)]
@@ -392,6 +421,8 @@ def render_context(context: Context) -> str:
         lines += ["", *_company(context.company)]
     if context.ownership is not None:
         lines += ["", *_ownership(context.ownership)]
+    if release_notes and release_notes.get("items"):
+        lines += ["", *_release(release_notes)]
     if context.valuation_history is not None:
         lines += ["", *_valuation(context.valuation_history)]
     if context.market_backdrop is not None and _backdrop(context.market_backdrop):

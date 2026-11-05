@@ -21,6 +21,7 @@ from tradingagents.llm_clients import create_tier_client, tier_provider
 from tradingagents.memory import TradingMemoryLog, settlement
 from tradingagents.memory.reflection import Reflector
 from tradingagents.plan.node import create_plan_node
+from tradingagents.release_notes import extract_release_notes
 from tradingagents.report_summary import create_summary_node
 from tradingagents.reporting import write_report_tree
 
@@ -129,6 +130,16 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
         self._resuming = False
+
+    def _read_release(self, supplied) -> dict | None:
+        """The checked notable items in the caller's earnings release; None when off, absent or unreadable."""
+        if not (self.config.get("release_notes") and supplied and supplied.earnings_release):
+            return None
+        try:
+            return extract_release_notes(self.quick_thinking_llm, supplied.earnings_release)
+        except Exception:  # the report does not wait on it
+            logger.exception("Could not read the earnings release")
+            return None
 
     def _supplied_context(self) -> Context | None:
         """The caller's verified data, when the run was given any (see ``api.service.build_config``)."""
@@ -325,13 +336,17 @@ class TradingAgentsGraph:
                 supplied and supplied.events and supplied.events.next_earnings):
             as_of = date.fromisoformat(trade_date)
             supplied = apply_estimate(supplied, company_name, as_of, estimate_next_earnings(company_name, as_of))
+        notes = self._read_release(supplied)
+        # The release text is only for reading once; the run carries the checked notes, not 35 KB of text.
+        kept = supplied.model_copy(update={"earnings_release": None}) if supplied else None
         return self.propagator.create_initial_state(
             company_name,
             trade_date,
             asset_type=asset_type,
             instrument_context=instrument_context,
-            verified_blocks=render_role_blocks(supplied) if supplied else {},
-            run_context=supplied.model_dump(mode="json") if supplied else None,
+            verified_blocks=render_role_blocks(kept, notes) if kept else {},
+            run_context=kept.model_dump(mode="json") if kept else None,
+            release_notes=notes,
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
         )
 

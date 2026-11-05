@@ -62,7 +62,8 @@ _TERMS = ", ".join(entry.term for entry in GLOSSARY)
 _FIGURES = """\
 Also fill `figures`: one entry for every dollar amount, percentage and multiple (like 9.1x)
 that you state in the text, with its label, value, unit (usd, usd_millions, usd_billions,
-pct, x or number), source and period. The source is `context` for the supplied-data block,
+pct, x or number), source and period. The source is `context` for the supplied-data block, `filing` for an
+amount from the earnings-release items,
 `readings` for the verified market readings, `plan` for the position plan, `analyst_report`
 for a figure taken from the reports below, or `derived` for your own calculation. Figures
 sourced to context, readings or plan are checked against that data, so use its exact
@@ -82,12 +83,13 @@ def word_count(text: str) -> int:
 
 def _material(state: dict, context: Context | None, readings: Readings | None,
               include_reports: bool = True) -> str:
+    notes = state.get("release_notes")
     plain = plain_rating(state.get("final_rating"))
     sections = _SECTIONS if include_reports else _DECISION_SECTIONS
     parts = ([f"## Rating for the reader\n{plain.label}: {plain.meaning} The internal rating is "
               f"{state['final_rating']}; use the label, never the internal term."] if plain else []) + [f"## {title}\n{state[key]}" for title, key in sections if state.get(key)]
     if context is not None:
-        parts.append(f"## Supplied verified data\n{render_context(context)}")
+        parts.append(f"## Supplied verified data\n{render_context(context, notes)}")
     if readings is not None:
         parts.append(f"## Verified market readings\n{_readings_block(readings)}")
     plan = state.get("position_plan")
@@ -197,11 +199,11 @@ def _readings(state: dict) -> Readings | None:
         return None
 
 
-def _known(context: Context | None, readings: Readings | None, plan: Any):
+def _known(context: Context | None, readings: Readings | None, plan: Any, notes: dict | None = None):
     try:
-        return known_values(context, readings, plan if isinstance(plan, dict) else None)
+        return known_values(context, readings, plan if isinstance(plan, dict) else None, notes)
     except (KeyError, TypeError, ValueError):  # a plan that does not parse adds nothing to check against
-        return known_values(context, readings, None)
+        return known_values(context, readings, None, notes)
 
 
 def create_summary_node(llm, context: Context | None = None, include_reports: bool = True):
@@ -211,7 +213,7 @@ def create_summary_node(llm, context: Context | None = None, include_reports: bo
             run = Context.model_validate(state["run_context"]) if state.get("run_context") else context
             outcome = write_summary(
                 llm, _material(state, run, readings, include_reports), ticker=state["company_of_interest"],
-                trade_date=state["trade_date"], known=_known(run, readings, state.get("position_plan")))
+                trade_date=state["trade_date"], known=_known(run, readings, state.get("position_plan"), state.get("release_notes")))
         except Exception:  # the report is done; a failure here must not discard it
             logger.exception("Summary: unexpected failure for %s", state.get("company_of_interest"))
             return {"report_summary": None, "summary_figures": None, "summary_problems": [],

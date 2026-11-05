@@ -7,6 +7,7 @@ from tradingagents.context.models import (
     SUPPORTED_SCHEMA_VERSIONS,
     Company,
     Context,
+    EarningsRelease,
     Events,
     Financials,
     MarketBackdrop,

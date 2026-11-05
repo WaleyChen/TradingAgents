@@ -8,6 +8,7 @@ block and still send the request.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -15,6 +16,7 @@ from tradingagents.context.models import (
     Balance,
     Company,
     Context,
+    EarningsRelease,
     Events,
     Financials,
     MarketBackdrop,
@@ -384,6 +386,29 @@ def check_prior_reports(reports: list[PriorReport], trade_date: date | None) -> 
     return found
 
 
+_RELEASE_MAX_AGE_DAYS = 130       # a company reports about every 90 days; older means a newer release was missed
+_TAG = re.compile(r"</?[A-Za-z][^>]*>")
+
+
+def check_earnings_release(r: EarningsRelease, trade_date: date | None) -> list[Problem]:
+    found = []
+    if r.period_end is not None and r.period_end > r.filed_on:
+        found.append(Problem("filed_before_period_end", "earnings_release.period_end",
+                             f"the release is filed {r.filed_on}, before its period ended {r.period_end}"))
+    if trade_date is not None:
+        if r.filed_on > trade_date:
+            found.append(Problem("as_of_after_trade_date", "earnings_release.filed_on",
+                                 f"the release was filed {r.filed_on}, after the run date {trade_date}"))
+        elif (trade_date - r.filed_on).days > _RELEASE_MAX_AGE_DAYS:
+            found.append(Problem("release_stale", "earnings_release.filed_on",
+                                 f"the release was filed {r.filed_on}, more than {_RELEASE_MAX_AGE_DAYS} days "
+                                 f"before the run date {trade_date}: send the latest one"))
+    if len(_TAG.findall(r.text)) > 20:
+        found.append(Problem("text_not_plain", "earnings_release.text",
+                             "the text still has HTML tags: strip them and send plain text"))
+    return found
+
+
 def check_events(e: Events) -> list[Problem]:
     found = []
     if e.next_earnings is not None and e.next_earnings.date <= e.as_of:
@@ -408,7 +433,7 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
     found = []
     blocks = [("financials", context.financials), ("price", context.price), ("events", context.events),
               ("company", context.company), ("technicals", context.technicals), ("ownership", context.ownership),
-              ("valuation_history", context.valuation_history)]
+              ("valuation_history", context.valuation_history), ("earnings_release", context.earnings_release)]
     if context.financials is not None:
         found += check_financials(context.financials)
     if context.events is not None:
@@ -421,6 +446,8 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
         found += check_ownership(context.ownership)
     if context.valuation_history is not None:
         found += check_valuation(context.valuation_history)
+    if context.earnings_release is not None:
+        found += check_earnings_release(context.earnings_release, trade_date)
     if context.market_backdrop is not None:
         found += check_backdrop(context.market_backdrop)
     found += check_prior_reports(context.prior_reports, trade_date)

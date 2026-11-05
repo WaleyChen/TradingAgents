@@ -20,6 +20,7 @@ class Propagator:
         portfolio_context: str = "",
         verified_blocks: dict[str, str] | None = None,
         run_context: dict[str, Any] | None = None,
+        release_notes: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Create the initial state for the agent graph.
 
@@ -40,6 +41,7 @@ class Propagator:
             "portfolio_context": portfolio_context,
             "verified_blocks": verified_blocks or {},
             "run_context": run_context,
+            "release_notes": release_notes,
             "investment_debate_state": InvestDebateState(
                 {
                     "bull_history": "",

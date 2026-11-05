@@ -21,8 +21,8 @@ from tradingagents.context.derive import derive_ownership, derive_technicals, sa
 from tradingagents.plan.check import Readings
 
 Unit = Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
-Source = Literal["context", "readings", "plan", "analyst_report", "derived"]
-VERIFIABLE = ("context", "readings", "plan")
+Source = Literal["context", "readings", "plan", "filing", "analyst_report", "derived"]
+VERIFIABLE = ("context", "readings", "plan", "filing")
 
 _SCALE = {"usd": 1.0, "usd_millions": 1e6, "usd_billions": 1e9, "pct": 1.0, "x": 1.0, "number": 1.0}
 _KIND = {"usd": "usd", "usd_millions": "usd", "usd_billions": "usd", "pct": "pct", "x": "x", "number": "number"}
@@ -78,7 +78,7 @@ def _close(a: float, b: float, tolerance: float = _TOLERANCE) -> bool:
 
 # --- what the text states ---------------------------------------------------
 
-_MONEY = re.compile(r"(?<![\w$])\$\s?(\d[\d,]*(?:\.\d+)?)(\s?(?:billion|million|thousand)\b|[BMKbmk]\b)?")
+_MONEY = re.compile(r"(?<![\w$])\$\s?(\d[\d,]*(?:\.\d+)?)(\s?(?:billion|million|thousand)\b|[BMKbmk]\b)?", re.IGNORECASE)
 _PERCENT = re.compile(r"(?<![\w.])([-+]?\d+(?:\.\d+)?)\s?%")
 _MULTIPLE = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)\s?[x×](?![\w])")
 _SUFFIX = {"b": 1e9, "billion": 1e9, "m": 1e6, "million": 1e6, "k": 1e3, "thousand": 1e3}
@@ -239,11 +239,14 @@ def _plan_values(plan: dict[str, Any]) -> list[Known]:
     return found
 
 
-def known_values(context: Context | None, readings: Readings | None, plan: dict[str, Any] | None) -> list[Known]:
+def known_values(context: Context | None, readings: Readings | None, plan: dict[str, Any] | None,
+                 release_notes: dict[str, Any] | None = None) -> list[Known]:
     """Every value the three verified sources hold, tagged with its source."""
     return [*(_context_values(context) if context else []),
             *(_readings_values(readings) if readings else []),
-            *(_plan_values(plan) if plan else [])]
+            *(_plan_values(plan) if plan else []),
+            *[Known("earnings release item", "usd", float(i["amount_usd"]), "filing")
+              for i in (release_notes or {}).get("items", []) if i.get("amount_usd") is not None]]
 
 
 # --- the check --------------------------------------------------------------

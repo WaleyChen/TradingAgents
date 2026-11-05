@@ -140,6 +140,12 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
     { "ticker": "MU", "as_of": "2026-10-12", "decision": "Overweight", "target": 1100.0,
       "price_then": 950.1, "horizon": "3-6 months" }
   ],
+  "earnings_release": {
+    "ticker": "ISRG", "source": "sec_edgar", "form": "8-K", "filed_on": "2026-10-20", "period_end": "2026-09-30",
+    "accession": "0001035267-26-000067",
+    "url": "https://www.sec.gov/Archives/edgar/data/1035267/000103526726000067/q326ex-991earningsrelease.htm",
+    "text": "Intuitive Announces Third Quarter Earnings ..."
+  },
   "ownership": {
     "ticker": "MU", "currency": "USD", "as_of": "2026-11-04",
     "funds": { "source": "sec_13f", "quarter_end": "2026-09-30", "managers_tracked": 24,
@@ -204,6 +210,17 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   service's own. `close` must be within 0.5% of `price.close` when both are dated the same
   day; `macd.histogram` must be `line` less `signal`; `close` must lie inside the 52-week
   range; and `as_of` must be within 7 days before the run date.
+- `earnings_release` is the company's earnings press release (the latest 8-K with Item 2.02, Exhibit
+  99.1, filed on or before the run date) as plain text, up to 120,000 characters; leave the block out when
+  there is none. One model call reads it into at most six notable items: one-time charges and gains with their
+  amounts, the company's own explanation of large changes, and guidance changes. An item is kept only if its
+  quote appears in your text word for word and any amount it states is an amount the quote states, so what the
+  analysts and the summary see has been checked against the filing. The raw text is never passed to them. The
+  amounts can be cited in the summary as figures with `source: "filing"`. The text is part of `context_digest`.
+  `url` must start `https://www.sec.gov/Archives/`, `accession` must look like `0001035267-26-000067`, `source`
+  is `sec_edgar`, and `form` is `8-K` or `6-K`. A release filed more than 130 days before the run date means a
+  newer one was missed (`release_stale`); text that still has HTML tags is refused (`text_not_plain`). This
+  step runs by default; `TRADINGAGENTS_RELEASE_NOTES=0` turns it off.
 - `valuation_history` is the stock's P/E against its own past. `pe_ttm` is price over
   trailing-twelve-month EPS; the service's own `pe_latest_annual` is price over the latest fiscal
   year's diluted EPS. They are named apart and the agents are told never to mix them. The range
@@ -294,6 +311,7 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 | `valuation_range_inconsistent` / `percentile_inconsistent` | `pe_ttm` is unordered, outside its own range, or its percentile does not fit |
 | `label_inconsistent` | a Fear & Greed label does not fit its value |
 | `prior_after_run` / `prior_order` / `prior_target_inconsistent` | a previous report is not before the run, not newest first, or its target is on the wrong side of its price |
+| `release_stale` / `text_not_plain` | the earnings release is over 130 days before the run date, or its text still has HTML tags |
 | `price_date` | the price is after the run date or more than 7 days before it |
 
 A passing request is internally consistent. That does not make it true: the checks
@@ -402,9 +420,9 @@ show it.
 **Checked figures.** The summary declares every dollar amount, percentage and multiple
 it states, with its exact value. `summary_figures` lists them, each with `label`, `value`, `unit` (`usd`,
 `usd_millions`, `usd_billions`, `pct`, `x`, `number`), `source` (`context`, `readings`,
-`plan`, `analyst_report`, `derived`) and `period`, plus `verified`. `verified` is true only
+`plan`, `filing`, `analyst_report`, `derived`) and `period`, plus `verified`. `verified` is true only
 when the figure was checked in code against your supplied `context`, the service's own
-market readings or the position plan (within 1%, for rounding). Figures from the analyst
+market readings, the position plan or the earnings-release items (within 1%, for rounding). Figures from the analyst
 reports or the model's own calculations are never marked verified. If a figure still fails
 after the model's retries, the summary is returned anyway and `summary_problems` lists
 `{code, subject, message, severity}` for each. `severity: "error"`: `figure_not_in_source`
