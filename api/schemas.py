@@ -6,8 +6,10 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
+from tradingagents.context import SUPPORTED_SCHEMA_VERSIONS, Context, check_context
 from tradingagents.plan import Plan
 
 AnalystName = Literal["market", "social", "news", "fundamentals"]
@@ -36,6 +38,22 @@ class CreateAnalysisRequest(BaseModel):
     quick_think_llm: str | None = None
     output_language: str | None = None
     save_reports: bool = True
+    context: Context | None = Field(
+        default=None,
+        description="Verified data from the caller (see docs/API.md); refused when its checks fail.",
+    )
+
+    @model_validator(mode="after")
+    def context_must_be_consistent(self) -> CreateAnalysisRequest:
+        if self.context is not None:
+            problems = check_context(self.context, ticker=self.ticker, trade_date=self.trade_date)
+            if problems:
+                raise PydanticCustomError(
+                    "context_inconsistent", "context is inconsistent: {summary}",
+                    {"summary": "; ".join(p.message for p in problems),
+                     "problems": [{"code": p.code, "path": p.path, "message": p.message} for p in problems]},
+                )
+        return self
 
     @field_validator("ticker")
     @classmethod
@@ -66,6 +84,8 @@ class AnalysisAccepted(BaseModel):
     ticker: str
     trade_date: date
     links: AnalysisLinks
+    context_digest: str | None = Field(
+        default=None, description="Fingerprint of the context as the service parsed it; null when none was sent.")
 
 
 class AnalysisReports(BaseModel):
@@ -92,6 +112,7 @@ class AnalysisJobResponse(BaseModel):
         description="Checked position plan; null when none passed the checks (see plan_error).",
     )
     plan_error: str | None = None
+    context_digest: str | None = None
     summary: str | None = Field(
         default=None,
         description="About 600 words in one analyst voice; null when the step is off or none fit the length limit.",
@@ -103,6 +124,21 @@ class AnalysisJobResponse(BaseModel):
     links: AnalysisLinks
 
 
+class ContextProblem(BaseModel):
+    code: str = Field(description="Stable identifier of the check that failed.")
+    path: str = Field(description="Where in the context the problem is, e.g. financials.annual[0].income.net_income.")
+    message: str
+
+
+class ContextCheckResponse(BaseModel):
+    ok: bool
+    problems: list[ContextProblem] = Field(description="Every check the context fails; empty when ok.")
+    context_digest: str | None = None
+    metrics: dict[str, float] = Field(
+        description="Metrics the service computes from the values (so do not send them).")
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
+    context_schema_versions: list[int] = Field(default_factory=lambda: list(SUPPORTED_SCHEMA_VERSIONS))
     service: str = "tradingagents-api"

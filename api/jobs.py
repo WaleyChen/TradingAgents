@@ -22,6 +22,7 @@ from api.schemas import (
     JobStatus,
 )
 from api.service import AnalysisResult, run_analysis
+from tradingagents.context import context_digest
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,7 @@ class AnalysisJob:
             reports=AnalysisReports(**self.reports) if self.reports else None,
             plan=self.plan,
             plan_error=self.plan_error,
+            context_digest=context_digest(self.request.context) if self.request.context else None,
             summary=self.summary,
             error=self.error,
             created_at=self.created_at,

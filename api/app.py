@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from datetime import date
 
 from fastapi import Depends, FastAPI, HTTPException, status
 
@@ -13,9 +14,16 @@ from api.schemas import (
     AnalysisAccepted,
     AnalysisJobResponse,
     AnalysisLinks,
+    ContextCheckResponse,
     CreateAnalysisRequest,
     HealthResponse,
     JobStatus,
+)
+from tradingagents.context import (
+    Context,
+    check_context as run_context_checks,
+    context_digest,
+    derive_metrics,
 )
 
 
@@ -56,6 +64,27 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         return HealthResponse()
 
     @app.post(
+        "/api/v1/context/check",
+        response_model=ContextCheckResponse,
+        dependencies=[Depends(require_api_key)],
+        tags=["analyses"],
+    )
+    def check_context(context: Context, ticker: str | None = None,
+                      trade_date: date | None = None) -> ContextCheckResponse:
+        """Run the checks a request's context must pass, without starting an analysis.
+
+        Free: no model call. Give ``ticker`` and ``trade_date`` to apply the same ties
+        to the request that ``POST /api/v1/analyses`` applies. A malformed context is
+        still a 422; a well-formed one that fails a check is a 200 with every problem listed.
+        """
+        ticker = ticker.strip().upper() if ticker else None
+        problems = run_context_checks(context, ticker=ticker, trade_date=trade_date)
+        metrics = derive_metrics(context.financials, context.price) if context.financials else {}
+        return ContextCheckResponse(
+            ok=not problems, metrics=metrics, context_digest=context_digest(context),
+            problems=[{"code": p.code, "path": p.path, "message": p.message} for p in problems])
+
+    @app.post(
         "/api/v1/analyses",
         response_model=AnalysisAccepted,
         status_code=status.HTTP_202_ACCEPTED,
@@ -70,6 +99,7 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
             ticker=job.request.ticker,
             trade_date=job.request.trade_date,
             links=AnalysisLinks(self=f"/api/v1/analyses/{job.id}"),
+            context_digest=context_digest(job.request.context) if job.request.context else None,
         )
 
     @app.get(

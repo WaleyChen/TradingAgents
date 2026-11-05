@@ -36,6 +36,7 @@ If `TRADINGAGENTS_API_KEY` is set, every `/api/v1/*` route requires either:
 |--------|------|-------------|
 | `GET` | `/health` | Liveness |
 | `POST` | `/api/v1/analyses` | Start analysis → `202` + job id |
+| `POST` | `/api/v1/context/check` | Dry-run the `context` checks: free, no model call |
 | `GET` | `/api/v1/analyses` | List jobs in this process (newest first) |
 | `GET` | `/api/v1/analyses/{id}` | Job status / result |
 
@@ -81,6 +82,120 @@ Response `202`:
 Statuses: `queued` → `running` → `completed` | `failed`.
 
 On `completed`, the body includes `decision` (e.g. `BUY`) and `reports` (markdown sections matching the CLI report files).
+
+### Supplying verified data (`context`)
+
+`POST /api/v1/analyses` accepts an optional `context` with data your app has
+already verified. Every agent reads it as the source for those figures, in
+preference to what the service fetches itself, and cites it by source and period.
+Only the blocks below are accepted; anything else (`technicals`, `instructions`,
+...) returns `422`. The shape is in [`context.schema.json`](context.schema.json).
+
+```json
+"context": {
+  "schema_version": 1,
+  "financials": {
+    "ticker": "MU", "currency": "USD", "as_of": "2026-11-04", "fiscal_year_end": "2026-09-03",
+    "annual": [{
+      "fiscal_period": "FY2026", "period_start": "2025-09-05", "period_end": "2026-09-03",
+      "kind": "annual", "source": "sec_xbrl", "filed_at": "2026-10-20",
+      "income": { "revenue": 133188000000, "gross_profit": 107504000000,
+                  "operating_income": 99340000000, "net_income": 84969000000,
+                  "eps_basic": 75.62, "eps_diluted": 74.91 },
+      "cash_flow": { "net_cash_flow_from_operations": 89700000000,
+                     "capital_expenditure": 30700000000, "free_cash_flow": 59000000000 }
+    }],
+    "quarterly": [{
+      "fiscal_period": "Q4 FY2026", "period_start": "2026-05-29", "period_end": "2026-09-03",
+      "kind": "standalone", "source": "sec_xbrl", "income": { "revenue": 54225000000 }
+    }],
+    "balance": [{
+      "fiscal_period": "FY2026", "as_of": "2026-09-03", "source": "sec_xbrl",
+      "total_assets": 195888000000, "total_liabilities": 57510000000,
+      "shareholders_equity": 138378000000, "cash_and_equivalents": 38400000000,
+      "current_assets": 90000000000, "current_liabilities": 25000000000
+    }]
+  },
+  "price": { "ticker": "MU", "currency": "USD", "source": "getmarketalerts",
+             "as_of": "2026-11-04", "close": 795.23 },
+  "notes": "Optional free text. Unverified: context only, never a source for a figure."
+}
+```
+
+**Shape rules**
+
+- `ticker` is required on `financials` and `price` and must match the request's
+  `ticker`; `currency` is required and is `USD` for now.
+- Amounts are **whole dollars as integers** (`133188000000`, not `133188000000.5`).
+  Per-share fields (`eps_basic`, `eps_diluted`) and `price.close` are decimals.
+  **Unknown is `null`, never `0`**: a zero where a value is required (gross profit,
+  operating income, net income, capex, free cash flow, liabilities, equity) is
+  rejected as a missing value.
+- `source` is one of `sec_xbrl`, `financial_datasets`, `getmarketalerts`, and is set
+  on each statement, balance sheet and price; there is no source for the whole block.
+  One statement per period, so there is nothing to rank sources against.
+- `kind` says how long a statement is: `standalone` (a quarter, about 60-120 days),
+  `ytd` (120-300) or `annual` (300-400).
+- `period_start` is optional on `annual`. A `standalone` quarter may leave it out
+  only if another supplied quarter ends 60-120 days before it; the service then
+  derives the length, and never guesses a start. The earliest quarter and every `ytd`
+  row must send it.
+- At most 10 annual, 16 quarterly and 26 balance rows. One balance sheet per date;
+  where it falls on a statement's `period_end`, it must carry the same
+  `fiscal_period` label as one of the statements ending that day.
+- `notes` is shown to the agents as unverified context, with a length limit.
+
+**Checks.** A request is refused, before any model call, if:
+
+| `code` | When |
+|---|---|
+| `ticker_mismatch` | `financials` or `price` is for a different company than the request (or than each other) |
+| `missing_period_start` | a `ytd` row, or a quarter that cannot be measured from an earlier one, has no start |
+| `period_length` | a period's length does not match its `kind` |
+| `period_after_as_of` | a period or balance date is after the block's `as_of` |
+| `as_of_after_trade_date` | `financials.as_of` is after the request's `trade_date` |
+| `filed_before_period_end` | `filed_at` is before the period ended |
+| `duplicate_period` | two statements share a `period_end`, or two balance sheets a date |
+| `quarters_mismatch_year` | four quarters do not add up to the year (within 1%) |
+| `quarters_exceed_year` | fewer quarters already exceed the year |
+| `balance_mismatch` | assets differ from liabilities plus equity |
+| `balance_order` | current assets or liabilities exceed their totals |
+| `balance_label_mismatch` | a balance sheet's label disagrees with the statement ending that day |
+| `fcf_mismatch` | free cash flow differs from operating cash flow less capex (either sign for capex) |
+| `income_order` | gross profit, operating income or net income exceed what they should |
+| `zero_placeholder` | a value that looks like a missing value was sent as `0` |
+| `price_date` | the price is after the run date or more than 7 days before it |
+
+A passing request is internally consistent. That does not make it true: the checks
+cannot know whether the source matches the filings.
+
+**Failures are machine-readable.** The `422` carries
+`detail[0].ctx.problems = [{"code", "path", "message"}, ...]`, where `path` points at the
+value, e.g. `financials.annual[0].income.net_income`. Because the blocks are
+independent, drop the failing block (`financials` or `price`) and resend: a bad context
+never has to cost a report. A malformed context (wrong type, unknown key) is also a
+`422`, in the usual FastAPI form.
+
+**What the service computes.** Margins, capex to revenue, trailing revenue,
+year-over-year growth, liabilities to equity, working capital, and price to earnings
+(price over the latest annual diluted EPS) come from your values. Do not send them.
+There is no debt field, so there is no debt-to-equity.
+
+**Digest.** The `202`, the job and `/context/check` return `context_digest`:
+`sha256:` of the context as the service parsed it, as canonical JSON (sorted keys, no
+whitespace, nulls kept). Store it with the job to record what a report was built on.
+
+**Dry run.** `POST /api/v1/context/check` runs every check above without starting
+an analysis and costs nothing. Send the `context` object as the body; add
+`?ticker=MU&trade_date=2026-11-04` to apply the ties to the request as well. It
+returns `{"ok": false, "problems": [...], "metrics": {...}, "context_digest": "..."}`:
+a well-formed context that fails a check is a `200` with every problem listed.
+
+**Versions.** `schema_version` changes only for a breaking change: a removed or
+renamed field, a new required field, or a tighter rule. New optional fields, new blocks
+and new enum values are additive and keep the version. `/health` lists the versions the
+service reads in `context_schema_versions`. The schema file is generated from the same
+models that validate requests, and a test fails if it is stale.
 
 ### Summary
 

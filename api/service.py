@@ -8,6 +8,7 @@ from datetime import date
 from typing import Any, NamedTuple
 
 from api.schemas import CreateAnalysisRequest
+from tradingagents.context.render import render_context
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -29,6 +30,8 @@ def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
         config["structured_plan"] = True  # the API returns a checked plan unless told not to
     if "TRADINGAGENTS_REPORT_SUMMARY" not in os.environ:
         config["report_summary"] = True  # and a short summary
+    if request.context is not None:
+        config["verified_context"] = render_context(request.context)
     config["memory_n_cross"] = 0  # a customer's report must not draw on other tickers' lessons
 
     if request.max_debate_rounds is not None:

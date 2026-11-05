@@ -1,0 +1,511 @@
+{
+  "$defs": {
+    "Balance": {
+      "additionalProperties": false,
+      "description": "A balance sheet on one date; at most one per date.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "cash_and_equivalents": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cash And Equivalents"
+        },
+        "current_assets": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Assets"
+        },
+        "current_liabilities": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Liabilities"
+        },
+        "fiscal_period": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Fiscal Period",
+          "type": "string"
+        },
+        "shareholders_equity": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shareholders Equity"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "total_assets": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Assets"
+        },
+        "total_liabilities": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Liabilities"
+        }
+      },
+      "required": [
+        "fiscal_period",
+        "as_of",
+        "source"
+      ],
+      "title": "Balance",
+      "type": "object"
+    },
+    "CashFlow": {
+      "additionalProperties": false,
+      "properties": {
+        "capital_expenditure": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Capital Expenditure"
+        },
+        "free_cash_flow": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Free Cash Flow"
+        },
+        "net_cash_flow_from_operations": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Cash Flow From Operations"
+        }
+      },
+      "title": "CashFlow",
+      "type": "object"
+    },
+    "Financials": {
+      "additionalProperties": false,
+      "properties": {
+        "annual": {
+          "items": {
+            "$ref": "#/$defs/Statement"
+          },
+          "maxItems": 10,
+          "title": "Annual",
+          "type": "array"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "balance": {
+          "items": {
+            "$ref": "#/$defs/Balance"
+          },
+          "maxItems": 26,
+          "title": "Balance",
+          "type": "array"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "fiscal_year_end": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fiscal Year End"
+        },
+        "quarterly": {
+          "items": {
+            "$ref": "#/$defs/Statement"
+          },
+          "maxItems": 16,
+          "title": "Quarterly",
+          "type": "array"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "as_of"
+      ],
+      "title": "Financials",
+      "type": "object"
+    },
+    "Income": {
+      "additionalProperties": false,
+      "properties": {
+        "eps_basic": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000.0,
+              "exclusiveMinimum": -1000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eps Basic"
+        },
+        "eps_diluted": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000.0,
+              "exclusiveMinimum": -1000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eps Diluted"
+        },
+        "gross_profit": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gross Profit"
+        },
+        "net_income": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Income"
+        },
+        "operating_income": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Operating Income"
+        },
+        "revenue": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revenue"
+        }
+      },
+      "title": "Income",
+      "type": "object"
+    },
+    "Price": {
+      "additionalProperties": false,
+      "description": "A verified closing price, so the service can derive valuation ratios.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "close": {
+          "exclusiveMaximum": 10000000.0,
+          "exclusiveMinimum": 0,
+          "title": "Close",
+          "type": "number"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "source",
+        "as_of",
+        "close"
+      ],
+      "title": "Price",
+      "type": "object"
+    },
+    "Statement": {
+      "additionalProperties": false,
+      "description": "Income and cash flow over one period; ``kind`` says how long it is.",
+      "properties": {
+        "cash_flow": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CashFlow"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "filed_at": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filed At"
+        },
+        "fiscal_period": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Fiscal Period",
+          "type": "string"
+        },
+        "income": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Income"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "enum": [
+            "standalone",
+            "ytd",
+            "annual"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "period_start": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Period Start"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "fiscal_period",
+        "period_end",
+        "kind",
+        "source"
+      ],
+      "title": "Statement",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "What a caller supplies with a request. Only the blocks defined here are accepted.",
+  "properties": {
+    "financials": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Financials"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 4000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Free text. Unverified: context only, never a source for a figure.",
+      "title": "Notes"
+    },
+    "price": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Price"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "Context",
+  "type": "object"
+}

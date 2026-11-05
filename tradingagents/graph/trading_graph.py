@@ -305,11 +305,14 @@ class TradingAgentsGraph:
         and loads them alongside the analysts (see ``_memory_step``).
         """
         trade_date = _validate_trade_date(trade_date)
+        instrument_context = self.resolve_instrument_context(company_name, asset_type, trade_date)
+        if self.config.get("verified_context"):   # the caller's checked data reaches every agent
+            instrument_context = f"{instrument_context}\n\n{self.config['verified_context']}"
         return self.propagator.create_initial_state(
             company_name,
             trade_date,
             asset_type=asset_type,
-            instrument_context=self.resolve_instrument_context(company_name, asset_type, trade_date),
+            instrument_context=instrument_context,
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
         )
 
