@@ -153,9 +153,9 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   where it falls on a statement's `period_end`, it must carry the same
   `fiscal_period` label as one of the statements ending that day.
 - `events` gives the next earnings date and up to four recent reports (estimates may be
-  `null`). When it is sent, a `plan.watch` item about earnings (one that mentions earnings,
-  a print, or the next quarterly report or results) may carry only `next_earnings.date` or
-  no date. With no `events`, or a null `next_earnings`, such an item may carry no date at
+  `null`). When it is sent, a dated `plan.watch` item about reporting (one that mentions earnings,
+  a print, results, guidance, a filing or 10-Q/10-K, a quarterly, annual or next report, or a
+  fiscal period like "Q4 FY2026") may carry only `next_earnings.date` or no date. With no `events`, or a null `next_earnings`, such an item may carry no date at
   all, so a model cannot invent one. This applies to every request, with or without `context`.
 - `notes` is shown to the agents as unverified context, with a length limit.
 
@@ -255,10 +255,11 @@ when the figure was checked in code against your supplied `context`, the service
 market readings or the position plan (within 1%, for rounding). Figures from the analyst
 reports or the model's own calculations are never marked verified. If a figure still fails
 after the model's retries, the summary is returned anyway and `summary_problems` lists
-`{code, subject, message}` for each: `figure_not_in_source` (a figure claimed from verified
-data is not in it) or `undeclared_figure` (a dollar, percent or multiple appears in the text
-but not in the list). Hide the summary or show a warning when `summary_problems` is
-non-empty. Both fields are `null` when the provider could not return structured output.
+`{code, subject, message, severity}` for each. `severity: "error"`: `figure_not_in_source`
+(a figure claimed from verified data is not in it) or `too_long`. `severity: "warning"`:
+`undeclared_figure` (a dollar, percent or multiple appears in the text but not in the list),
+which only means that figure is unverified, never that it claims verification. Hide the
+summary or show a warning when any problem has `severity: "error"`; warnings need no action. Both fields are `null` when the provider could not return structured output.
 This cannot see a bare number with no `$`, `%` or `x`, or a wrong figure within 1% of a real one.
 
 ### Position plan
@@ -303,7 +304,7 @@ or is retried.
     "if_you_own": "Hold; add only on the entry levels above.",
     "if_you_dont": "Start small now and build on the entry levels.",
     "watch": [
-      { "what": "Gross margin holds above 75% in the next filing", "when": "2026-12-10", "effect": "supports" }
+      { "what": "Stock reclaims its 50-day average", "when": "2026-12-10", "effect": "supports" }
     ],
     "confidence": "medium",
     "confidence_reason": "Strong fundamentals, but capex return is unproven."

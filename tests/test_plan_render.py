@@ -61,7 +61,7 @@ def test_the_decision_fields_are_shown_with_their_method_and_basis():
     assert "**If you own it:** Hold; add only on the entry levels below." in text
     assert "**If you don't:** Start small now and build on the entry levels." in text
     assert "- bull: $330.00, 25%: Capex pays back faster than feared (Judgment: needs two clean quarters.)" in text
-    assert "- supports: Gross margin holds above 75% in the next filing (by 2026-12-10)" in text
+    assert "- supports: Stock reclaims its 50-day average (by 2026-12-10)" in text
 
 
 @pytest.mark.unit
@@ -74,7 +74,7 @@ def test_a_negative_expected_return_and_an_undated_watch_item_read_correctly():
     data["watch"][0]["effect"] = "weakens"
     text = render_plan(data)
     assert "Expected return: -4.2%" in text
-    assert "- weakens: Gross margin holds above 75% in the next filing" in text and "(by" not in text
+    assert "- weakens: Stock reclaims its 50-day average" in text and "(by" not in text
 
 
 @pytest.mark.unit

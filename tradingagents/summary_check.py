@@ -57,9 +57,13 @@ class Known:
 
 @dataclass(frozen=True)
 class SummaryProblem:
+    """``error``: a figure claims verified data it is not in. ``warning``: a figure was left unlisted,
+    so it is unverified, which is not a false claim."""
+
     code: str
     subject: str
     message: str
+    severity: str = "error"
 
 
 def normalize(value: float, unit: str) -> tuple[str, float]:
@@ -178,7 +182,7 @@ def check_summary(draft: SummaryDraft, known: list[Known]) -> list[SummaryProble
     for kind, value, raw in figures_in_text(draft.text):
         if raw not in seen and not any(k == kind and _close(value, v) for k, v in declared):
             found.append(SummaryProblem("undeclared_figure", raw,
-                                        f"{raw} appears in the text but is not in the figures list"))
+                                        f"{raw} appears in the text but is not in the figures list", "warning"))
         seen.add(raw)
     return found
 

@@ -257,8 +257,11 @@ def _check_target(plan: Plan, readings: Readings, rating: str | None) -> list[st
     return found
 
 
-_EARNINGS = re.compile(r"\b(?:earnings|print|quarterly (?:report|results)|next (?:report|results))\b",
-                       re.IGNORECASE)
+# A dated watch item that talks about results, guidance, a filing or a fiscal period is
+# about a reporting date, and a reporting date is one the caller supplies or nobody does.
+_EARNINGS = re.compile(
+    r"\b(?:earnings|print|results|guidance|filings?|10-[kq]|(?:quarterly|annual|next) report"
+    r"|q[1-4]\s*(?:fy)?\s?\d{2,4}|fy\s?\d{2,4})\b", re.IGNORECASE)
 
 
 def _check_watch(plan: Plan, next_earnings: date | None) -> list[str]:

@@ -332,3 +332,18 @@ def test_the_plan_step_passes_its_verified_readings_on_to_the_summary(monkeypatc
     monkeypatch.setattr(plan_node_module, "compute_readings", lambda *a: (_ for _ in ()).throw(RuntimeError()))
     assert create_plan_node(FakeLLM(_plan()))({"company_of_interest": "ACME", "trade_date": "d"
                                                })["verified_readings"] is None
+
+
+@pytest.mark.unit
+def test_the_outcome_marks_which_problems_are_warnings():
+    wrong = Figure(label="net margin", value=70.0, unit="pct", source="context")
+    llm = StructuredLLM(*[_draft("Net margin 70.0% and $500.", wrong)] * 3)
+    problems = write_summary(llm, "material", known=KNOWN).problems
+    assert {(p["code"], p["severity"]) for p in problems} == {
+        ("figure_not_in_source", "error"), ("undeclared_figure", "warning")}
+
+
+@pytest.mark.unit
+def test_a_summary_that_is_too_long_is_an_error():
+    llm = StructuredLLM(*[_draft(_words(MAX_WORDS + 50))] * 3)
+    assert write_summary(llm, "material", known=KNOWN).problems[0]["severity"] == "error"

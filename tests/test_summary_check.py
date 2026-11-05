@@ -129,3 +129,11 @@ def test_the_draft_schema_is_closed_and_bounded():
                 {"text": "x", "figures": [{"label": "a", "value": float("nan"), "unit": "usd", "source": "plan"}]}):
         with pytest.raises(ValidationError):
             SummaryDraft.model_validate(copy.deepcopy(bad))
+
+
+@pytest.mark.unit
+def test_an_undeclared_figure_is_a_warning_and_a_false_claim_of_verification_is_an_error():
+    stray = check_summary(draft("A $500 target.", fig(63.8, "pct", "context")), KNOWN)
+    assert [(p.code, p.severity) for p in stray if p.code == "undeclared_figure"] == [("undeclared_figure", "warning")]
+    false = check_summary(draft("Net margin 70.0%.", fig(70.0, "pct", "context")), KNOWN)
+    assert [(p.code, p.severity) for p in false] == [("figure_not_in_source", "error")]

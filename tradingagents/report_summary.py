@@ -119,11 +119,11 @@ or a support level a target or a fair value.
 
 def _problems(draft: SummaryDraft, known, *, figures: bool = True) -> list[dict[str, str]]:
     """Figure problems (when the model declared figures to check) and the length limit."""
-    found = ([{"code": p.code, "subject": p.subject, "message": p.message}
+    found = ([{"code": p.code, "subject": p.subject, "message": p.message, "severity": p.severity}
               for p in check_summary(draft, known)] if figures else [])
     count = word_count(draft.text)
     if count > MAX_WORDS:
-        found.insert(0, {"code": "too_long", "subject": "summary",
+        found.insert(0, {"code": "too_long", "subject": "summary", "severity": "error",
                          "message": f"the summary has {count} words; write it again in at most {MAX_WORDS}, "
                                     f"aiming for {TARGET_WORDS}"})
     return found
@@ -146,7 +146,8 @@ def write_summary(llm, material: str, *, ticker: str = "", trade_date: str = "",
         if draft is None:
             draft = _free_text(llm, prompt)
         if draft is None:
-            problems = [{"code": "empty", "subject": "summary", "message": "the reply was empty"}]
+            problems = [{"code": "empty", "subject": "summary", "severity": "error",
+                         "message": "the reply was empty"}]
         else:
             problems = _problems(draft, known, figures=checked)
             if not problems:

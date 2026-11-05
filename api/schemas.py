@@ -103,6 +103,10 @@ class SummaryProblem(BaseModel):
     code: str
     subject: str
     message: str
+    severity: Literal["error", "warning"] = Field(
+        default="error",
+        description="error: a figure claims verified data it is not in; warning: a figure was left "
+                    "out of the figures list, so it is unverified.")
 
 
 class AnalysisReports(BaseModel):

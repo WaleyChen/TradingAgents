@@ -118,6 +118,10 @@ def _watch(what, when):
 @pytest.mark.parametrize("what", [
     "Next quarterly report: growth and capex", "Q1 earnings call guidance", "Earnings print next month",
     "Quarterly results show margin recovery",
+    "Q4 FY2026 results confirming full-year free cash flow",           # real watch items from a prod run
+    "FY2027 guidance coming in at mid-teens growth or better",
+    "An explanation of the unexplained Q1 FY2026 net-income swing",
+    "The next 10-Q shows operating margin above -5%", "Next filing shows margin recovery",
 ])
 def test_a_watch_item_about_earnings_may_only_carry_the_supplied_date(what):
     ok = date(2026, 12, 17)
@@ -130,8 +134,12 @@ def test_a_watch_item_about_earnings_may_only_carry_the_supplied_date(what):
 
 
 @pytest.mark.unit
-def test_a_watch_item_that_is_not_about_earnings_keeps_its_own_date():
-    data = _watch("Gross margin holds above 75% in the next filing", "2026-12-10")
+@pytest.mark.parametrize("what", [
+    "Stock reclaims its 50-day average", "A sustained break below $55 on heavy volume",
+    "RSI recovers above 50", "Revenue growth stays above 20% by year end",
+])
+def test_a_watch_item_that_is_not_about_reporting_keeps_its_own_date(what):
+    data = _watch(what, "2026-12-10")
     assert problems(data, next_earnings=date(2026, 12, 17)) == []
     assert problems(data, next_earnings=None) == []
 
