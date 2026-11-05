@@ -347,3 +347,50 @@ def test_the_outcome_marks_which_problems_are_warnings():
 def test_a_summary_that_is_too_long_is_an_error():
     llm = StructuredLLM(*[_draft(_words(MAX_WORDS + 50))] * 3)
     assert write_summary(llm, "material", known=KNOWN).problems[0]["severity"] == "error"
+
+
+@pytest.mark.unit
+def test_the_summary_can_skip_the_full_analyst_reports_and_read_the_digested_decision():
+    from tradingagents.report_summary import _material
+
+    full = _material(STATE, None, None)
+    lean = _material(STATE, None, None, include_reports=False)
+    for report in ("MARKET-TEXT", "SENTIMENT-TEXT", "NEWS-TEXT", "FUNDAMENTALS-TEXT"):
+        assert report in full and report not in lean
+    for kept in ("Underweight. Trim into strength.", "RESEARCH-PLAN", "TRADER-PLAN"):
+        assert kept in lean
+    assert len(lean) < len(full)
+
+
+@pytest.mark.unit
+def test_the_node_follows_the_include_reports_switch():
+    full_llm, lean_llm = StructuredLLM(_draft()), StructuredLLM(_draft())
+    create_summary_node(full_llm)(STATE)
+    create_summary_node(lean_llm, include_reports=False)(STATE)
+    assert "MARKET-TEXT" in full_llm.prompts[0] and "MARKET-TEXT" not in lean_llm.prompts[0]
+
+
+@pytest.mark.unit
+def test_the_summary_step_can_run_on_the_quick_model(monkeypatch):
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    assert DEFAULT_CONFIG["summary_reads_reports"] is True and DEFAULT_CONFIG["summary_tier"] == "deep"
+
+
+@pytest.mark.unit
+def test_the_api_summary_reads_the_digests_unless_the_environment_says_otherwise(monkeypatch):
+    request = CreateAnalysisRequest(ticker="ACME", trade_date=date(2026, 11, 2))
+    monkeypatch.delenv("TRADINGAGENTS_SUMMARY_READS_REPORTS", raising=False)
+    assert build_config(request)["summary_reads_reports"] is False
+    monkeypatch.setenv("TRADINGAGENTS_SUMMARY_READS_REPORTS", "1")
+    assert build_config(request)["summary_reads_reports"] is True
+
+
+@pytest.mark.unit
+def test_the_summary_switches_are_settable_from_the_environment(monkeypatch):
+    from tradingagents.default_config import build_default_config
+
+    monkeypatch.setenv("TRADINGAGENTS_SUMMARY_READS_REPORTS", "false")
+    monkeypatch.setenv("TRADINGAGENTS_SUMMARY_TIER", "quick")
+    config = build_default_config()
+    assert config["summary_reads_reports"] is False and config["summary_tier"] == "quick"

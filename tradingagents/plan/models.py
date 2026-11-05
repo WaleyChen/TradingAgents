@@ -9,7 +9,7 @@ after the trigger fires.
 from __future__ import annotations
 
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -39,7 +39,20 @@ IndicatorName = Literal[
 
 
 class _Strict(BaseModel):
+    """Closed: an unknown field is refused, unless it is null, which says nothing and is dropped.
+
+    A model sometimes adds an invented field set to null. Throwing the whole plan away for that
+    costs a retry and protects nothing; one that carries a value is still refused.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_null_unknowns(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if v is not None or k in cls.model_fields}
+        return data
 
 
 class PriceTest(_Strict):

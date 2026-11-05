@@ -78,20 +78,6 @@ def test_notes_are_labelled_unverified_and_cannot_break_out_of_their_block():
 
 
 @pytest.mark.unit
-def test_the_api_config_carries_the_rendered_block():
-    request = _request()
-    assert build_config(request)["verified_context"] == render_context(request.context)
-
-
-@pytest.mark.unit
-def test_every_agent_sees_the_block_through_the_instrument_context(tmp_path, monkeypatch, offline):  # noqa: F811
-    graph = _graph(tmp_path, monkeypatch, ScriptedModel(), verified_context="VERIFIED-BLOCK")
-    assert "VERIFIED-BLOCK" in graph.create_run_state("NVDA", TRADE_DATE)["instrument_context"]
-    graph = _graph(tmp_path, monkeypatch, ScriptedModel())
-    assert "VERIFIED-BLOCK" not in graph.create_run_state("NVDA", TRADE_DATE)["instrument_context"]
-
-
-@pytest.mark.unit
 def test_metrics_in_the_block_match_the_derivation():
     metrics = derive_metrics(Financials.model_validate(GOOD))
     assert f"{metrics['net_margin_pct']:.1f}%" in render_context(_request().context)

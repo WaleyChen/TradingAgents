@@ -23,6 +23,8 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_CHECKPOINT_ENABLED":   "checkpoint_enabled",
     "TRADINGAGENTS_STRUCTURED_PLAN":      "structured_plan",
     "TRADINGAGENTS_REPORT_SUMMARY":       "report_summary",
+    "TRADINGAGENTS_SUMMARY_READS_REPORTS": "summary_reads_reports",
+    "TRADINGAGENTS_SUMMARY_TIER":         "summary_tier",
     "TRADINGAGENTS_BENCHMARK_TICKER":     "benchmark_ticker",
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
@@ -137,6 +139,10 @@ def build_default_config() -> dict:
         # Write a ~600-word summary of the whole report with one more model call.
         # Off for the CLI; the HTTP API turns it on.
         "report_summary": False,
+        # Whether the summary reads the analysts' full reports, or only the decision-makers'
+        # digests of them (cheaper); and which model tier writes it ("deep" or "quick").
+        "summary_reads_reports": True,
+        "summary_tier": "deep",
         # Output language for analyst reports and final decision
         # Internal agent debate stays in English for reasoning quality
         "output_language": "English",

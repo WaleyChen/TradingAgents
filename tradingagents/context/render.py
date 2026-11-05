@@ -120,12 +120,10 @@ def _financials(f: Financials, price: Price | None, company: Company | None = No
             lines += [f"{title}:", *(_statement(s) for s in sorted(rows, key=lambda s: s.period_end))]
     if f.balance:
         lines += ["Balance sheets:", *(_balance(b) for b in sorted(f.balance, key=lambda b: b.as_of))]
-    metrics = derive_metrics(f, price, company)
-    shown = [f"{label} " + (fmt.format(metrics[key]) if fmt else _money(metrics[key]))
-             for key, label, fmt in _METRICS if key in metrics]
-    if shown:
-        lines.append("Computed metrics: " + "; ".join(shown) + ".")
-    if "debt_to_equity" not in metrics:
+    computed = _computed_metrics(f, price, company)
+    if computed:
+        lines.append(computed)
+    if "debt_to_equity" not in derive_metrics(f, price, company):
         lines.append("There is no debt figure, so do not calculate debt-to-equity from liabilities.")
     return lines
 
@@ -155,6 +153,60 @@ def _events(e: Events) -> list[str]:
     return lines
 
 
+def _price_line(p: Price) -> str:
+    return f"Verified price for {p.ticker}: close ${p.close:,.2f} {p.currency} on {p.as_of} (source {p.source})."
+
+
+def _notes_lines(notes: str) -> list[str]:
+    text = " ".join(_TAGS.sub(" ", notes).split())
+    return ["Caller notes (unverified; context only, never a source for any figure above):", f"<notes>{text}</notes>"]
+
+
+def _computed_metrics(f: Financials, price: Price | None, company: Company | None) -> str | None:
+    metrics = derive_metrics(f, price, company)
+    shown = [f"{label} " + (fmt.format(metrics[key]) if fmt else _money(metrics[key]))
+             for key, label, fmt in _METRICS if key in metrics]
+    return "Computed metrics: " + "; ".join(shown) + "." if shown else None
+
+
+def _digest(context: Context) -> list[str]:
+    """The headline facts, so the agents that weigh everything agree with the analysts' numbers."""
+    lines = ["Key verified facts (computed and checked by the service; use them as given):"]
+    if context.price is not None:
+        lines.append(_price_line(context.price))
+    if context.company is not None and context.company.market_cap:
+        lines.append(f"Market cap {_money(context.company.market_cap)}.")
+    if context.financials is not None:
+        metrics = _computed_metrics(context.financials, context.price, context.company)
+        lines += [metrics] if metrics else []
+    if context.technicals is not None:
+        distances = [line for line in _technicals(context.technicals) if line.startswith("Computed distances")]
+        lines += distances
+    if context.events is not None and context.events.next_earnings is not None:
+        nxt = context.events.next_earnings
+        lines.append(f"Next earnings: {nxt.date} ({nxt.fiscal_period}, "
+                     f"{'confirmed' if nxt.confirmed else 'not confirmed'}); the only date you may give.")
+    return lines if len(lines) > 1 else []
+
+
+def render_role_blocks(context: Context) -> dict[str, str]:
+    """What each kind of agent reads: only the blocks it uses, and a short digest for the deciders.
+
+    Every call an agent makes resends its block, so the full context is not given to all of them.
+    The sentiment analyst reads none. A role with nothing to read is left out.
+    """
+    notes = _notes_lines(context.notes) if context.notes else []
+    c, plan = context, {}
+    fin = _financials(c.financials, c.price, c.company) if c.financials else []
+    price = [_price_line(c.price)] if c.price else []
+    plan["market"] = [*(_technicals(c.technicals) if c.technicals else []), *price]
+    plan["news"] = _events(c.events) if c.events else []
+    plan["fundamentals"] = [*fin, *(_company(c.company) if c.company else []),
+                            *(_events(c.events) if c.events else []), *price, *notes]
+    plan["decision"] = [*_digest(c), *notes] if _digest(c) else []
+    return {role: "\n".join([_GUIDANCE, "", *lines]) for role, lines in plan.items() if lines}
+
+
 def render_context(context: Context) -> str:
     lines = [_GUIDANCE]
     if context.financials is not None:
@@ -166,10 +218,7 @@ def render_context(context: Context) -> str:
     if context.events is not None:
         lines += ["", *_events(context.events)]
     if context.price is not None:
-        p = context.price
-        lines += ["", f"Verified price for {p.ticker}: close ${p.close:,.2f} {p.currency} on {p.as_of} (source {p.source})."]
+        lines += ["", _price_line(context.price)]
     if context.notes:
-        notes = " ".join(_TAGS.sub(" ", context.notes).split())
-        lines += ["", "Caller notes (unverified; context only, never a source for any figure above):",
-                  f"<notes>{notes}</notes>"]
+        lines += ["", *_notes_lines(context.notes)]
     return "\n".join(lines)

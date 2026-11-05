@@ -109,6 +109,29 @@ class SummaryProblem(BaseModel):
                     "out of the figures list, so it is unverified.")
 
 
+class Progress(BaseModel):
+    stage: Literal["analysts", "debate", "decision", "plan", "summary"] = Field(
+        description="Where the run is. The analysts run in parallel, so they are one stage.")
+    stage_index: int = Field(description="1-based position of the stage among the ones this run has.")
+    stages_total: int
+    started_at: datetime
+    analysts_done: list[str] = Field(description="Which analysts have finished (market, news, fundamentals, sentiment).")
+    eta_seconds: int | None = Field(
+        description="Seconds left, from the median stage times of recent finished jobs; null until there is history.")
+
+
+class StageUsage(BaseModel):
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float | None = Field(description="Estimated; null when a model has no known price.")
+
+
+class Usage(BaseModel):
+    stages: dict[str, StageUsage]
+    total_cost_usd: float | None = Field(description="Sum over the stages; null if any stage has no cost.")
+
+
 class AnalysisReports(BaseModel):
     market_report: str | None = None
     sentiment_report: str | None = None
@@ -150,6 +173,10 @@ class AnalysisJobResponse(BaseModel):
         default=None,
         description="Figure checks the summary still fails; empty or null when it passed.",
     )
+    progress: Progress | None = Field(
+        default=None, description="Present while the job is running; null before it starts and once it is done.")
+    usage: Usage | None = Field(
+        default=None, description="Tokens and estimated cost per stage; present once the job has finished.")
     error: str | None = None
     created_at: datetime
     started_at: datetime | None = None

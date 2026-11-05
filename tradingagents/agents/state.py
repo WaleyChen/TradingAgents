@@ -70,6 +70,7 @@ class AgentState(MessagesState):
     final_rating: Annotated[str, "The Portfolio Manager's 5-tier rating, or REVIEW when it has none"]
     position_plan: Annotated[dict | None, "Validated position plan (entries, exits, scenarios) from the Plan step; None when the step is off or no plan passed the checks"]
     plan_error: Annotated[str | None, "Why the Plan step returned no plan; None when it did or the step is off"]
+    verified_blocks: Annotated[dict, "The caller's verified data as each kind of agent reads it (market, news, fundamentals, decision); empty when none was supplied"]
     verified_readings: Annotated[dict | None, "The verified price and indicator readings the Plan step checked against; None when the step is off or had no market data"]
     summary_figures: Annotated[list | None, "The summary's declared figures, each marked verified only when checked in code against the caller's context, the readings or the plan; None when none were declared"]
     summary_problems: Annotated[list | None, "Checks the summary still fails after its retries: [{code, subject, message}]"]

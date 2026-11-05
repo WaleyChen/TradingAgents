@@ -147,5 +147,6 @@ def test_failed_job_surfaces_error(monkeypatch):
         job_id = resp.json()["id"]
         done = _wait_for_terminal(client, job_id)
         assert done["status"] == "failed"
-        assert "llm unavailable" in done["error"]
+        assert "llm unavailable" not in done["error"]   # the detail is logged, never returned
+        assert done["error"].startswith("the analysis failed")
     manager.shutdown(wait=False)

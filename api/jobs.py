@@ -6,26 +6,34 @@ replace this store with Redis or another shared backend.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 import uuid
+from collections import deque
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from api.progress import ProgressBoard, eta_seconds
 from api.schemas import (
     AnalysisJobResponse,
     AnalysisLinks,
     AnalysisReports,
     CreateAnalysisRequest,
     JobStatus,
+    Progress,
+    StageUsage,
+    Usage,
 )
 from api.service import AnalysisResult, run_analysis
 from tradingagents.context import context_digest
 from tradingagents.rating_label import plain_rating
 
 logger = logging.getLogger(__name__)
+
+FAILED_MESSAGE = "the analysis failed; see the service log"
 
 
 def _utcnow() -> datetime:
@@ -45,9 +53,27 @@ class AnalysisJob:
     summary_figures: list[dict] | None = None
     summary_problems: list[dict] | None = None
     error: str | None = None
+    usage: dict[str, dict] | None = None
+    board: ProgressBoard = field(default_factory=ProgressBoard, repr=False)
+    history: deque = field(default_factory=lambda: deque(maxlen=0), repr=False)   # the manager's recent stage times
     created_at: datetime = field(default_factory=_utcnow)
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
+    def _progress(self) -> Progress | None:
+        snap = self.board.snapshot() if self.status == JobStatus.running else None
+        if snap is None:
+            return None
+        eta = eta_seconds(self.board.stages(), snap.stage, self.board.elapsed_in_stage(), list(self.history))
+        return Progress(stage=snap.stage, stage_index=snap.stage_index, stages_total=snap.stages_total,
+                        started_at=snap.started_at, analysts_done=snap.analysts_done, eta_seconds=eta)
+
+    def _usage(self) -> Usage | None:
+        if not self.usage:
+            return None
+        costs = [u["cost_usd"] for u in self.usage.values()]
+        return Usage(stages={stage: StageUsage(**u) for stage, u in self.usage.items()},
+                     total_cost_usd=round(sum(costs), 4) if all(c is not None for c in costs) else None)
 
     def to_response(self) -> AnalysisJobResponse:
         plain = plain_rating(self.decision)
@@ -68,6 +94,8 @@ class AnalysisJob:
             summary=self.summary,
             summary_figures=self.summary_figures,
             summary_problems=self.summary_problems,
+            progress=self._progress(),
+            usage=self._usage(),
             error=self.error,
             created_at=self.created_at,
             started_at=self.started_at,
@@ -91,9 +119,11 @@ class JobManager:
             thread_name_prefix="tradingagents-job",
         )
         self._runner = runner or run_analysis
+        self._takes_board = "board" in inspect.signature(self._runner).parameters
+        self._history: deque = deque(maxlen=20)    # stage durations of recently finished jobs
 
     def submit(self, request: CreateAnalysisRequest) -> AnalysisJob:
-        job = AnalysisJob(id=str(uuid.uuid4()), request=request)
+        job = AnalysisJob(id=str(uuid.uuid4()), request=request, history=self._history)
         with self._lock:
             self._jobs[job.id] = job
         logger.info(
@@ -116,6 +146,11 @@ class JobManager:
     def shutdown(self, wait: bool = False) -> None:
         self._executor.shutdown(wait=wait, cancel_futures=True)
 
+    def _record_durations(self, job: AnalysisJob) -> None:
+        durations = job.board.durations()
+        if durations:
+            self._history.append(durations)
+
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -132,7 +167,8 @@ class JobManager:
             request.trade_date,
         )
         try:
-            decision, reports, plan, plan_error, summary, figures, problems = AnalysisResult(*self._runner(request))
+            run = self._runner(request, board=job.board) if self._takes_board else self._runner(request)
+            decision, reports, plan, plan_error, summary, figures, problems = AnalysisResult(*run)
             with self._lock:
                 job = self._jobs[job_id]
                 job.decision = decision
@@ -142,13 +178,16 @@ class JobManager:
                 job.summary = summary
                 job.summary_figures = figures
                 job.summary_problems = problems
+                job.usage = job.board.stage_usage() or None
+                self._record_durations(job)
                 job.status = JobStatus.completed
                 job.completed_at = _utcnow()
             logger.info("Completed analysis job %s decision=%s", job_id, decision)
-        except Exception as exc:
+        except Exception:
             logger.exception("Analysis job %s failed", job_id)
             with self._lock:
                 job = self._jobs[job_id]
                 job.status = JobStatus.failed
-                job.error = str(exc)
+                job.error = FAILED_MESSAGE   # the detail is in the log: a provider error can echo a key
+                job.usage = job.board.stage_usage() or None
                 job.completed_at = _utcnow()

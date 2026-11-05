@@ -30,7 +30,7 @@ def create_portfolio_manager(llm):
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
 
     def portfolio_manager_node(state) -> dict:
-        instrument_context = get_instrument_context_from_state(state)
+        instrument_context = get_instrument_context_from_state(state, "decision")
         portfolio_context = get_portfolio_context_from_state(state)
 
         history = state["risk_debate_state"]["history"]

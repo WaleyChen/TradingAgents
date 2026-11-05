@@ -11,6 +11,7 @@ import tradingagents
 from tradingagents.agents.context import build_instrument_context, resolve_instrument_identity
 from tradingagents.agents.rating import run_rating
 from tradingagents.context import Context
+from tradingagents.context.render import render_role_blocks
 from tradingagents.dataflows.config import run_config, run_config_context, set_config
 from tradingagents.dataflows.date_window import get_current_date, is_historical
 from tradingagents.dataflows.symbols import safe_ticker_component
@@ -116,7 +117,10 @@ class TradingAgentsGraph:
         plan_node = (create_plan_node(self.deep_thinking_llm, supplied.events if supplied else None,
                                       supplied.technicals if supplied else None)
                      if self.config.get("structured_plan") else None)
-        summary_node = create_summary_node(self.deep_thinking_llm, supplied) if self.config.get("report_summary") else None
+        summary_node = create_summary_node(
+            self.quick_thinking_llm if self.config.get("summary_tier") == "quick" else self.deep_thinking_llm,
+            supplied, include_reports=self.config.get("summary_reads_reports", True),
+        ) if self.config.get("report_summary") else None
         self.workflow = self.graph_setup.setup_graph(
             selected_analysts, memory_node=self._memory_step, plan_node=plan_node,
             summary_node=summary_node,
@@ -315,13 +319,13 @@ class TradingAgentsGraph:
         """
         trade_date = _validate_trade_date(trade_date)
         instrument_context = self.resolve_instrument_context(company_name, asset_type, trade_date)
-        if self.config.get("verified_context"):   # the caller's checked data reaches every agent
-            instrument_context = f"{instrument_context}\n\n{self.config['verified_context']}"
+        supplied = self._supplied_context()   # the caller's checked data, split by who reads it
         return self.propagator.create_initial_state(
             company_name,
             trade_date,
             asset_type=asset_type,
             instrument_context=instrument_context,
+            verified_blocks=render_role_blocks(supplied) if supplied else {},
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
         )
 
@@ -394,7 +398,8 @@ class TradingAgentsGraph:
                    checkpoint_thread_id: str | None = None, portfolio=None):
         """Execute the graph and write the resulting state to disk and memory log."""
         init_agent_state = self.create_run_state(company_name, trade_date, asset_type, portfolio)
-        args = self.propagator.get_graph_args()
+        # Handlers also go to the graph itself, or they would see model calls but never which node is running.
+        args = self.propagator.get_graph_args(self.callbacks)
 
         # Inject the checkpoint thread_id (from checkpoint_scope) so the same
         # ticker+date+graph-shape resumes; a different one starts fresh (#1089).

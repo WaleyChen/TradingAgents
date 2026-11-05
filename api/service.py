@@ -7,8 +7,8 @@ from copy import deepcopy
 from datetime import date
 from typing import Any, NamedTuple
 
+from api.progress import ProgressBoard, StageTracker, stages_for
 from api.schemas import CreateAnalysisRequest
-from tradingagents.context.render import render_context
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -32,8 +32,9 @@ def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
         config["structured_plan"] = True  # the API returns a checked plan unless told not to
     if "TRADINGAGENTS_REPORT_SUMMARY" not in os.environ:
         config["report_summary"] = True  # and a short summary
+    if "TRADINGAGENTS_SUMMARY_READS_REPORTS" not in os.environ:
+        config["summary_reads_reports"] = False  # written from the decision-makers' digests: half the cost
     if request.context is not None:
-        config["verified_context"] = render_context(request.context)
         config["context_data"] = request.context.model_dump(mode="json")
     config["memory_n_cross"] = 0  # a customer's report must not draw on other tickers' lessons
 
@@ -65,13 +66,15 @@ def extract_reports(final_state: dict[str, Any]) -> dict[str, str | None]:
     }
 
 
-def run_analysis(request: CreateAnalysisRequest) -> AnalysisResult:
+def run_analysis(request: CreateAnalysisRequest, board: ProgressBoard | None = None) -> AnalysisResult:
     """Execute the graph synchronously and return its decision, reports and plan."""
     config = build_config(request)
+    tracker = StageTracker(stages_for(config), board)   # reports the stage and the usage to the job
     graph = TradingAgentsGraph(
         selected_analysts=list(request.analysts),
         debug=False,
         config=config,
+        callbacks=[tracker],
     )
 
     trade_date: date | str = request.trade_date

@@ -447,3 +447,26 @@ def test_the_target_method_comes_from_a_closed_list_and_watch_needs_at_least_one
     data["watch"] = []
     with pytest.raises(ValidationError):
         Plan.model_validate(data)
+
+
+@pytest.mark.unit
+def test_an_invented_field_with_no_value_is_dropped_not_a_reason_to_discard_the_plan():
+    data = copy.deepcopy(GOOD)
+    for leg in (*data["entries"], *data["exits"]):
+        leg["entry_note"] = None                                   # what a real model emitted
+    data["scenarios"][0]["comment"] = None
+    data["made_up"] = None
+    plan = Plan.model_validate(data)
+    assert plan.entries[0].portfolio_pct == 3.0 and not hasattr(plan.entries[0], "entry_note")
+
+
+@pytest.mark.unit
+def test_an_invented_field_that_says_something_is_still_refused():
+    data = copy.deepcopy(GOOD)
+    data["entries"][0]["entry_note"] = "buy the dip"
+    with pytest.raises(ValidationError):
+        Plan.model_validate(data)
+    data = copy.deepcopy(GOOD)
+    data["surprise"] = 0
+    with pytest.raises(ValidationError):
+        Plan.model_validate(data)

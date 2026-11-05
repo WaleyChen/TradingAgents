@@ -51,6 +51,10 @@ _SECTIONS = (
     ("Trader proposal", "trader_investment_plan"),
 )
 
+# What the decision-makers already digested from the analysts' full reports.
+_DECISION_SECTIONS = tuple(s for s in _SECTIONS if s[1] in
+                           ("final_trade_decision", "investment_plan", "trader_investment_plan"))
+
 _FIGURES = """\
 Also fill `figures`: one entry for every dollar amount, percentage and multiple (like 9.1x)
 that you state in the text, with its label, value, unit (usd, usd_millions, usd_billions,
@@ -72,10 +76,12 @@ def word_count(text: str) -> int:
     return len(text.split())
 
 
-def _material(state: dict, context: Context | None, readings: Readings | None) -> str:
+def _material(state: dict, context: Context | None, readings: Readings | None,
+              include_reports: bool = True) -> str:
     plain = plain_rating(state.get("final_rating"))
+    sections = _SECTIONS if include_reports else _DECISION_SECTIONS
     parts = ([f"## Rating for the reader\n{plain.label}: {plain.meaning} The internal rating is "
-              f"{state['final_rating']}; use the label, never the internal term."] if plain else []) + [f"## {title}\n{state[key]}" for title, key in _SECTIONS if state.get(key)]
+              f"{state['final_rating']}; use the label, never the internal term."] if plain else []) + [f"## {title}\n{state[key]}" for title, key in sections if state.get(key)]
     if context is not None:
         parts.append(f"## Supplied verified data\n{render_context(context)}")
     if readings is not None:
@@ -173,19 +179,19 @@ def _known(context: Context | None, readings: Readings | None, plan: Any):
         return known_values(context, readings, None)
 
 
-def create_summary_node(llm, context: Context | None = None):
+def create_summary_node(llm, context: Context | None = None, include_reports: bool = True):
     def summary_node(state) -> dict:
         try:
             readings = _readings(state)
             outcome = write_summary(
-                llm, _material(state, context, readings), ticker=state["company_of_interest"],
+                llm, _material(state, context, readings, include_reports), ticker=state["company_of_interest"],
                 trade_date=state["trade_date"], known=_known(context, readings, state.get("position_plan")))
         except Exception:  # the report is done; a failure here must not discard it
             logger.exception("Summary: unexpected failure for %s", state.get("company_of_interest"))
             return {"report_summary": None, "summary_figures": None, "summary_problems": []}
         if outcome.problems:
             logger.warning("Summary for %s has problems: %s", state.get("company_of_interest"),
-                           [p["code"] for p in outcome.problems])
+                           [(p["code"], p["subject"]) for p in outcome.problems])
         return {"report_summary": outcome.text, "summary_figures": outcome.figures,
                 "summary_problems": outcome.problems}
 
