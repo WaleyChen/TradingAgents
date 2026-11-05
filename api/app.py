@@ -79,7 +79,7 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
         """
         ticker = ticker.strip().upper() if ticker else None
         problems = run_context_checks(context, ticker=ticker, trade_date=trade_date)
-        metrics = derive_metrics(context.financials, context.price) if context.financials else {}
+        metrics = derive_metrics(context.financials, context.price, context.company) if context.financials else {}
         return ContextCheckResponse(
             ok=not problems, metrics=metrics, context_digest=context_digest(context),
             problems=[{"code": p.code, "path": p.path, "message": p.message} for p in problems])

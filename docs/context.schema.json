@@ -94,6 +94,20 @@
           "default": null,
           "title": "Total Assets"
         },
+        "total_debt": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Debt"
+        },
         "total_liabilities": {
           "anyOf": [
             {
@@ -164,6 +178,129 @@
         }
       },
       "title": "CashFlow",
+      "type": "object"
+    },
+    "Company": {
+      "additionalProperties": false,
+      "description": "Who the company is, and the figures per-share and enterprise-value maths need.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "exchange": {
+          "anyOf": [
+            {
+              "maxLength": 30,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exchange"
+        },
+        "industry": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Industry"
+        },
+        "market_cap": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Market Cap"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "sector": {
+          "anyOf": [
+            {
+              "maxLength": 60,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sector"
+        },
+        "shares_outstanding": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Shares Outstanding"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "source",
+        "as_of"
+      ],
+      "title": "Company",
       "type": "object"
     },
     "EarningsReport": {
@@ -377,6 +514,20 @@
     "Income": {
       "additionalProperties": false,
       "properties": {
+        "depreciation_and_amortization": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depreciation And Amortization"
+        },
         "eps_basic": {
           "anyOf": [
             {
@@ -463,6 +614,55 @@
         }
       },
       "title": "Income",
+      "type": "object"
+    },
+    "Macd": {
+      "additionalProperties": false,
+      "properties": {
+        "histogram": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": -10000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Histogram"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": -10000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "signal": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": -10000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signal"
+        }
+      },
+      "title": "Macd",
       "type": "object"
     },
     "NextEarnings": {
@@ -628,11 +828,205 @@
       ],
       "title": "Statement",
       "type": "object"
+    },
+    "Technicals": {
+      "additionalProperties": false,
+      "description": "The levels the caller's own chart shows; with these the report and the chart agree.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "close": {
+          "exclusiveMaximum": 10000000.0,
+          "exclusiveMinimum": 0,
+          "title": "Close",
+          "type": "number"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "ema_10": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ema 10"
+        },
+        "high_52w": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "High 52W"
+        },
+        "low_52w": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low 52W"
+        },
+        "macd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Macd"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "rsi_14": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rsi 14"
+        },
+        "sma_20": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sma 20"
+        },
+        "sma_200": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sma 200"
+        },
+        "sma_50": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000.0,
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sma 50"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume"
+        },
+        "volume_avg_50d": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000000000000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume Avg 50D"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "source",
+        "as_of",
+        "close"
+      ],
+      "title": "Technicals",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "description": "What a caller supplies with a request. Only the blocks defined here are accepted.",
   "properties": {
+    "company": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Company"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "events": {
       "anyOf": [
         {
@@ -685,6 +1079,17 @@
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "technicals": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Technicals"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     }
   },
   "title": "Context",

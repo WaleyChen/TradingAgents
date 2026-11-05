@@ -118,6 +118,17 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   },
   "price": { "ticker": "MU", "currency": "USD", "source": "getmarketalerts",
              "as_of": "2026-11-04", "close": 795.23 },
+  "technicals": {
+    "ticker": "MU", "currency": "USD", "source": "getmarketalerts", "as_of": "2026-11-04", "close": 795.23,
+    "sma_20": 914.9, "sma_50": 972.08, "sma_200": 753.73, "ema_10": 878.2, "rsi_14": 35.38,
+    "macd": { "line": -38.89, "signal": -29.12, "histogram": -9.77 },
+    "volume": 35400000, "volume_avg_50d": 21800000, "high_52w": 1213.56, "low_52w": 201.37
+  },
+  "company": {
+    "ticker": "MU", "currency": "USD", "source": "financial_datasets", "as_of": "2026-11-04",
+    "name": "Micron Technology, Inc.", "sector": "Technology", "industry": "Semiconductors",
+    "exchange": "NASDAQ", "market_cap": 898000000000, "shares_outstanding": 1128000000
+  },
   "events": {
     "ticker": "MU", "currency": "USD", "as_of": "2026-11-05", "source": "financial_datasets",
     "next_earnings": { "date": "2026-12-17", "fiscal_period": "Q1 FY2027", "confirmed": false },
@@ -152,6 +163,20 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 - At most 10 annual, 16 quarterly and 26 balance rows. One balance sheet per date;
   where it falls on a statement's `period_end`, it must carry the same
   `fiscal_period` label as one of the statements ending that day.
+- `technicals` are the levels your chart shows. When sent, they are the readings the plan is
+  checked against (its triggers, the "already true" test, the figures the summary may cite
+  as verified), so the report and your chart agree. Only `close` is required: anything you
+  leave out (an average, RSI, the MACD histogram) is filled from the service's own readings,
+  and if that fails too your values stand alone. With no `technicals` the readings are the
+  service's own. `close` must be within 0.5% of `price.close` when both are dated the same
+  day; `macd.histogram` must be `line` less `signal`; `close` must lie inside the 52-week
+  range; and `as_of` must be within 7 days before the run date.
+- `company` gives the name, sector, industry, exchange, `market_cap` and
+  `shares_outstanding` (all optional except the identity fields). With `price`, the market
+  cap must be within 3% of price times shares, or the request is refused with
+  `market_cap_mismatch`. `financials.balance[].total_debt` and
+  `financials.annual|quarterly[].income.depreciation_and_amortization` are optional and
+  unlock the metrics below; `total_debt` may not exceed `total_liabilities`.
 - `events` gives the next earnings date and up to four recent reports (estimates may be
   `null`). When it is sent, a dated `plan.watch` item about reporting (one that mentions earnings,
   a print, results, guidance, a filing or 10-Q/10-K, a quarterly, annual or next report, or a
@@ -180,6 +205,11 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 | `zero_placeholder` | a value that looks like a missing value was sent as `0` |
 | `earnings_date_passed` | `events.next_earnings.date` is not after the block's `as_of` |
 | `reported_before_period_end` / `reported_after_as_of` | a recent report is dated before its period ended, or after `as_of` |
+| `market_cap_mismatch` | `company.market_cap` is more than 3% from price times shares |
+| `technicals_date` | `technicals.as_of` is after the run date or more than 7 days before it |
+| `technicals_price_mismatch` | `technicals.close` differs from `price.close` by over 0.5% on the same date |
+| `macd_inconsistent` | the MACD histogram is not the line less the signal |
+| `range_inconsistent` | the close is outside the supplied 52-week range |
 | `price_date` | the price is after the run date or more than 7 days before it |
 
 A passing request is internally consistent. That does not make it true: the checks
@@ -195,7 +225,11 @@ never has to cost a report. A malformed context (wrong type, unknown key) is als
 **What the service computes.** Margins, capex to revenue, trailing revenue,
 year-over-year growth, liabilities to equity, working capital, and price to earnings
 (price over the latest annual diluted EPS) come from your values. Do not send them.
-There is no debt field, so there is no debt-to-equity.
+From `technicals` it computes how far the close is from each average and the 52-week high,
+and volume against its 50-day average. With `company` and `total_debt` it also computes net debt, enterprise value, debt to
+equity and, with D&A, EV to EBITDA; with a market cap (yours, or price times shares) it
+computes the free cash flow yield. Without `total_debt` there is no debt-to-equity, only
+liabilities to equity, and the agents are told not to calculate one.
 
 **Digest.** The `202`, the job and `/context/check` return `context_digest`:
 `sha256:` of the context as the service parsed it, as canonical JSON (sorted keys, no

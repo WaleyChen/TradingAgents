@@ -5,18 +5,18 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict
 
-from tradingagents.context import Events
+from tradingagents.context import Events, Technicals
 from tradingagents.plan.generate import FAILED, generate_plan
-from tradingagents.plan.readings import compute_readings
+from tradingagents.plan.readings import compute_readings, readings_from
 
 logger = logging.getLogger(__name__)
 
 
-def create_plan_node(llm, events: Events | None = None):
+def create_plan_node(llm, events: Events | None = None, technicals: Technicals | None = None):
     def plan_node(state) -> dict:
         ticker, trade_date = state["company_of_interest"], state["trade_date"]
         try:
-            readings = compute_readings(ticker, trade_date)
+            readings = readings_from(technicals, ticker, trade_date, fetch=compute_readings)
         except Exception as exc:  # no data, vendor down: no plan, but the report stands
             logger.warning("Plan: no verified readings for %s on %s (%s)", ticker, trade_date, exc)
             return {"position_plan": None, "verified_readings": None,

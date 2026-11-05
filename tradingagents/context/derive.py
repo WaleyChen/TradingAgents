@@ -6,7 +6,7 @@ the schema, so there is no debt-to-equity: only liabilities to equity.
 
 from __future__ import annotations
 
-from tradingagents.context.models import Financials, Price
+from tradingagents.context.models import Company, Financials, Price, Technicals
 
 
 def _pct(part: float | None, whole: float | None) -> float | None:
@@ -45,13 +45,40 @@ def _balance_metrics(f: Financials) -> dict[str, float | None]:
     }
 
 
-def derive_metrics(f: Financials, price: Price | None = None) -> dict[str, float]:
+def _market_cap(price: Price | None, company: Company | None) -> float | None:
+    if company is None:
+        return None
+    if company.market_cap:
+        return float(company.market_cap)
+    if price is not None and company.shares_outstanding:
+        return price.close * company.shares_outstanding
+    return None
+
+
+def _leverage(f: Financials, cap: float | None, ebitda: float | None) -> dict[str, float | None]:
+    b = max(f.balance, key=lambda b: b.as_of, default=None)
+    if b is None or b.total_debt is None:
+        return {}
+    net_debt = b.total_debt - b.cash_and_equivalents if b.cash_and_equivalents is not None else None
+    ev = cap + net_debt if cap is not None and net_debt is not None else None
+    return {
+        "net_debt": net_debt, "enterprise_value": ev,
+        "ev_to_ebitda": ev / ebitda if ev is not None and ebitda and ebitda > 0 else None,
+        "debt_to_equity": b.total_debt / b.shareholders_equity
+        if b.shareholders_equity and b.shareholders_equity > 0 else None,
+    }
+
+
+def derive_metrics(f: Financials, price: Price | None = None, company: Company | None = None) -> dict[str, float]:
     latest = max(f.annual, key=lambda s: s.period_end, default=None)
     income = latest.income if latest else None
     cash = latest.cash_flow if latest else None
     revenue = income.revenue if income else None
     capex = abs(cash.capital_expenditure) if cash and cash.capital_expenditure is not None else None
     eps = income.eps_diluted if income else None
+    cap = _market_cap(price, company)
+    da = income.depreciation_and_amortization if income else None
+    ebitda = income.operating_income + da if income and income.operating_income is not None and da is not None else None
     metrics = {
         "gross_margin_pct": _pct(income.gross_profit if income else None, revenue),
         "operating_margin_pct": _pct(income.operating_income if income else None, revenue),
@@ -61,6 +88,21 @@ def derive_metrics(f: Financials, price: Price | None = None) -> dict[str, float
         "ttm_revenue": _ttm_revenue(f),
         "revenue_growth_yoy_pct": _growth(f),
         "pe_latest_annual": price.close / eps if price is not None and eps and eps > 0 else None,
+        "fcf_yield_pct": _pct(cash.free_cash_flow if cash else None, cap),
         **_balance_metrics(f),
+        **_leverage(f, cap, ebitda),
+    }
+    return {name: value for name, value in metrics.items() if value is not None}
+
+
+def derive_technicals(t: Technicals) -> dict[str, float]:
+    """How far the close sits from each level, and today's volume against its average, in code."""
+    def away(level: float | None) -> float | None:
+        return (t.close / level - 1) * 100 if level else None
+
+    metrics = {
+        "pct_vs_sma_20": away(t.sma_20), "pct_vs_sma_50": away(t.sma_50), "pct_vs_sma_200": away(t.sma_200),
+        "pct_from_high_52w": away(t.high_52w),
+        "volume_vs_average": t.volume / t.volume_avg_50d if t.volume is not None and t.volume_avg_50d else None,
     }
     return {name: value for name, value in metrics.items() if value is not None}

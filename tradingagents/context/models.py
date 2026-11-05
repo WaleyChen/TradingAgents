@@ -56,6 +56,7 @@ class Income(_Strict):
     net_income: Amount
     eps_basic: PerShare
     eps_diluted: PerShare
+    depreciation_and_amortization: Amount
 
 
 class CashFlow(_Strict):
@@ -89,6 +90,7 @@ class Balance(_Strict):
     cash_and_equivalents: Amount
     current_assets: Amount
     current_liabilities: Amount
+    total_debt: Amount
 
 
 class Financials(_Company):
@@ -98,6 +100,54 @@ class Financials(_Company):
     annual: list[Statement] = Field(default_factory=list, max_length=10)
     quarterly: list[Statement] = Field(default_factory=list, max_length=16)
     balance: list[Balance] = Field(default_factory=list, max_length=26)
+
+
+Name = Annotated[str, Field(min_length=1, max_length=120)]
+PositiveCount = Annotated[int | None, Field(default=None, gt=0, lt=MAX_AMOUNT)]
+
+
+class Company(_Company):
+    """Who the company is, and the figures per-share and enterprise-value maths need."""
+
+    currency: Literal["USD"]
+    source: Source
+    as_of: date
+    name: Name | None = None
+    sector: Annotated[str, Field(min_length=1, max_length=60)] | None = None
+    industry: Annotated[str, Field(min_length=1, max_length=80)] | None = None
+    exchange: Annotated[str, Field(min_length=1, max_length=30)] | None = None
+    market_cap: PositiveCount
+    shares_outstanding: PositiveCount
+
+
+Level = Annotated[float | None, Field(default=None, gt=0, lt=1e7)]
+Signed = Annotated[float | None, Field(default=None, gt=-1e7, lt=1e7)]
+Volume = Annotated[int | None, Field(default=None, ge=0, lt=10**13)]
+
+
+class Macd(_Strict):
+    line: Signed
+    signal: Signed
+    histogram: Signed
+
+
+class Technicals(_Company):
+    """The levels the caller's own chart shows; with these the report and the chart agree."""
+
+    currency: Literal["USD"]
+    source: Source
+    as_of: date
+    close: float = Field(gt=0, lt=1e7)
+    sma_20: Level
+    sma_50: Level
+    sma_200: Level
+    ema_10: Level
+    rsi_14: Annotated[float | None, Field(default=None, ge=0, le=100)]
+    macd: Macd | None = None
+    volume: Volume
+    volume_avg_50d: Volume
+    high_52w: Level
+    low_52w: Level
 
 
 class Price(_Company):
@@ -144,5 +194,7 @@ class Context(_Strict):
     financials: Financials | None = None
     price: Price | None = None
     events: Events | None = None
+    company: Company | None = None
+    technicals: Technicals | None = None
     notes: str | None = Field(default=None, max_length=MAX_NOTES,
                               description="Free text. Unverified: context only, never a source for a figure.")

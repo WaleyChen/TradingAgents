@@ -4,8 +4,17 @@ from __future__ import annotations
 
 import re
 
-from tradingagents.context.derive import derive_metrics
-from tradingagents.context.models import Balance, Context, Events, Financials, Price, Statement
+from tradingagents.context.derive import derive_metrics, derive_technicals
+from tradingagents.context.models import (
+    Balance,
+    Company,
+    Context,
+    Events,
+    Financials,
+    Price,
+    Statement,
+    Technicals,
+)
 
 _GUIDANCE = (
     "Verified data supplied by the caller. The service checked these statements for "
@@ -22,6 +31,11 @@ _METRICS = (
     ("revenue_growth_yoy_pct", "revenue growth year over year", "{:.1f}%"),
     ("liabilities_to_equity", "liabilities to equity", "{:.2f}"),
     ("working_capital", "working capital", None),
+    ("net_debt", "net debt", None),
+    ("enterprise_value", "enterprise value", None),
+    ("ev_to_ebitda", "EV to EBITDA", "{:.1f}x"),
+    ("debt_to_equity", "debt to equity", "{:.2f}"),
+    ("fcf_yield_pct", "free cash flow yield", "{:.1f}%"),
     ("pe_latest_annual", "price-to-earnings (price over latest annual diluted EPS)", "{:.1f}"),
     ("ttm_revenue", "trailing four-quarter revenue", None),
 )
@@ -29,7 +43,8 @@ _TAGS = re.compile(r"</?notes>", re.IGNORECASE)
 
 
 def _money(value: float) -> str:
-    return f"${value / 1e9:,.3f}B" if abs(value) >= 1e9 else f"${value / 1e6:,.1f}M"
+    sign, value = ("-" if value < 0 else ""), abs(value)
+    return f"{sign}${value / 1e9:,.3f}B" if value >= 1e9 else f"{sign}${value / 1e6:,.1f}M"
 
 
 def _fields(item, names: tuple[tuple[str, str], ...]) -> list[str]:
@@ -59,19 +74,59 @@ def _balance(b: Balance) -> str:
     return f"- {b.fiscal_period} as of {b.as_of} (source {b.source}): " + "; ".join(values)
 
 
-def _financials(f: Financials, price: Price | None) -> list[str]:
+def _technicals(t: Technicals) -> list[str]:
+    parts = [f"close ${t.close:,.2f}"]
+    for label, value in (("20-day average", t.sma_20), ("50-day average", t.sma_50),
+                         ("200-day average", t.sma_200), ("10-day EMA", t.ema_10)):
+        if value is not None:
+            parts.append(f"{label} ${value:,.2f}")
+    if t.rsi_14 is not None:
+        parts.append(f"RSI(14) {t.rsi_14:g}")
+    if t.macd is not None and None not in (t.macd.line, t.macd.signal, t.macd.histogram):
+        parts.append(f"MACD line {t.macd.line:g}, signal {t.macd.signal:g}, histogram {t.macd.histogram:g}")
+    if t.volume is not None and t.volume_avg_50d is not None:
+        parts.append(f"volume {t.volume:,} against a 50-day average of {t.volume_avg_50d:,}")
+    for label, value in (("52-week high", t.high_52w), ("52-week low", t.low_52w)):
+        if value is not None:
+            parts.append(f"{label} ${value:,.2f}")
+    lines = [f"Technicals for {t.ticker} (source {t.source}, as of {t.as_of}): " + "; ".join(parts) + "."]
+    m, away = derive_technicals(t), []
+    for key, label in (("pct_vs_sma_20", "the 20-day average"), ("pct_vs_sma_50", "the 50-day average"),
+                       ("pct_vs_sma_200", "the 200-day average"), ("pct_from_high_52w", "the 52-week high")):
+        if key in m:
+            away.append(f"{abs(m[key]):.1f}% {'below' if m[key] < 0 else 'above'} {label}")
+    if "volume_vs_average" in m:
+        away.append(f"volume {m['volume_vs_average']:.2f}x its 50-day average")
+    if away:
+        lines.append("Computed distances: the close is " + ", ".join(away) + ".")
+    lines.append("These are the levels the customer's chart shows. Use only these levels; there are no other "
+                 "levels to cite as support or resistance.")
+    return lines
+
+
+def _company(c: Company) -> list[str]:
+    name = " ".join(c.name.split()) if c.name else c.ticker
+    where = ", ".join(" ".join(x.split()) for x in (c.exchange, c.sector, c.industry) if x)
+    facts = [f"market cap {_money(c.market_cap)}"] if c.market_cap else []
+    facts += [f"shares outstanding {c.shares_outstanding:,}"] if c.shares_outstanding else []
+    detail = "; ".join(x for x in (where, *facts) if x)
+    return [f"Company: {name} ({c.ticker}){': ' + detail if detail else ''} (source {c.source}, as of {c.as_of})."]
+
+
+def _financials(f: Financials, price: Price | None, company: Company | None = None) -> list[str]:
     lines = [f"Financials for {f.ticker} (as of {f.as_of}; amounts in {f.currency}):"]
     for title, rows in (("Annual", f.annual), ("Quarterly", f.quarterly)):
         if rows:
             lines += [f"{title}:", *(_statement(s) for s in sorted(rows, key=lambda s: s.period_end))]
     if f.balance:
         lines += ["Balance sheets:", *(_balance(b) for b in sorted(f.balance, key=lambda b: b.as_of))]
-    metrics = derive_metrics(f, price)
+    metrics = derive_metrics(f, price, company)
     shown = [f"{label} " + (fmt.format(metrics[key]) if fmt else _money(metrics[key]))
              for key, label, fmt in _METRICS if key in metrics]
     if shown:
         lines.append("Computed metrics: " + "; ".join(shown) + ".")
-    lines.append("There is no debt figure, so do not calculate debt-to-equity from liabilities.")
+    if "debt_to_equity" not in metrics:
+        lines.append("There is no debt figure, so do not calculate debt-to-equity from liabilities.")
     return lines
 
 
@@ -103,7 +158,11 @@ def _events(e: Events) -> list[str]:
 def render_context(context: Context) -> str:
     lines = [_GUIDANCE]
     if context.financials is not None:
-        lines += ["", *_financials(context.financials, context.price)]
+        lines += ["", *_financials(context.financials, context.price, context.company)]
+    if context.technicals is not None:
+        lines += ["", *_technicals(context.technicals)]
+    if context.company is not None:
+        lines += ["", *_company(context.company)]
     if context.events is not None:
         lines += ["", *_events(context.events)]
     if context.price is not None:

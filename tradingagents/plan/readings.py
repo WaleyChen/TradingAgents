@@ -6,12 +6,18 @@ snapshot uses, returned as numbers instead of a table.
 
 from __future__ import annotations
 
+import logging
 import math
+from collections.abc import Callable
+from dataclasses import fields
 
 from stockstats import wrap
 
+from tradingagents.context.models import Technicals
 from tradingagents.dataflows.vendors.yahoo.snapshot import _verified_rows as verified_rows
 from tradingagents.plan.check import Readings
+
+logger = logging.getLogger(__name__)
 
 # Rows an indicator needs before its value means what its name says; fewer
 # would give a partial average or a still-warming-up oscillator.
@@ -44,3 +50,31 @@ def compute_readings(symbol: str, as_of_date: str) -> Readings:
         date=latest["Date"].strftime("%Y-%m-%d"),
         **{name: _last(stats, f"close_{n}_sma", n) for name, n in _SMA_WINDOWS.items()},
     )
+
+
+_INDICATORS = ("rsi_14", "sma_20", "sma_50", "sma_200", "macd_histogram")
+
+
+def readings_from(technicals: Technicals | None, symbol: str, as_of_date: str,
+                  fetch: Callable[[str, str], Readings] = compute_readings) -> Readings:
+    """The caller's technicals where given, else our own readings, so the report and their chart agree.
+
+    Complete technicals are used as they are and nothing is fetched. Anything left out is
+    filled from our own computation; if that fails too, the supplied values stand alone.
+    Without technicals, or without a supplied close, a failed fetch raises as it always did.
+    """
+    if technicals is None:
+        return fetch(symbol, as_of_date)
+    macd = technicals.macd
+    supplied = {"price": technicals.close, "rsi_14": technicals.rsi_14, "sma_20": technicals.sma_20,
+                "sma_50": technicals.sma_50, "sma_200": technicals.sma_200,
+                "macd_histogram": macd.histogram if macd else None, "date": technicals.as_of.isoformat()}
+    if all(supplied[name] is not None for name in _INDICATORS):
+        return Readings(**supplied)
+    try:
+        ours = fetch(symbol, as_of_date)
+    except Exception as exc:  # the caller's close still gives a usable, if partial, set of readings
+        logger.warning("Readings: our own fetch failed for %s (%s); using the supplied technicals", symbol, exc)
+        return Readings(**supplied)
+    merged = {f.name: getattr(ours, f.name) for f in fields(Readings)}
+    return Readings(**{**merged, **{k: v for k, v in supplied.items() if v is not None}})

@@ -113,7 +113,8 @@ class TradingAgentsGraph:
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         supplied = self._supplied_context()
-        plan_node = (create_plan_node(self.deep_thinking_llm, supplied.events if supplied else None)
+        plan_node = (create_plan_node(self.deep_thinking_llm, supplied.events if supplied else None,
+                                      supplied.technicals if supplied else None)
                      if self.config.get("structured_plan") else None)
         summary_node = create_summary_node(self.deep_thinking_llm, supplied) if self.config.get("report_summary") else None
         self.workflow = self.graph_setup.setup_graph(

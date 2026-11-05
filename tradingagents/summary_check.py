@@ -17,6 +17,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from tradingagents.context import Context, derive_metrics
+from tradingagents.context.derive import derive_technicals
 from tradingagents.plan.check import Readings
 
 Unit = Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
@@ -96,7 +97,9 @@ def figures_in_text(text: str) -> list[tuple[str, float, str]]:
 # --- what the verified sources hold -----------------------------------------
 
 _METRIC_KIND = {"liabilities_to_equity": "x", "pe_latest_annual": "x", "working_capital": "usd",
-                "ttm_revenue": "usd"}
+                "ttm_revenue": "usd", "net_debt": "usd", "enterprise_value": "usd", "ev_to_ebitda": "x",
+                "debt_to_equity": "x"}
+_METRIC_LABEL = {"fcf_yield_pct": "free cash flow yield"}
 
 
 def _context_values(context: Context) -> list[Known]:
@@ -111,17 +114,44 @@ def _context_values(context: Context) -> list[Known]:
             found += [Known(name.replace("_", " "), "usd", float(value), "context")
                       for name, value in b.model_dump().items()
                       if isinstance(value, int) and not isinstance(value, bool)]
-        for name, value in derive_metrics(f, context.price).items():
+        for name, value in derive_metrics(f, context.price, context.company).items():
             kind = _METRIC_KIND.get(name, "pct")
-            found.append(Known(name.removesuffix("_pct").replace("_", " "), kind, float(value), "context"))
+            label = _METRIC_LABEL.get(name, name.removesuffix("_pct").replace("_", " "))
+            found.append(Known(label, kind, float(value), "context"))
     if context.price is not None:
         found.append(Known("price close", "usd", context.price.close, "context"))
+    if context.technicals is not None:
+        found += _technicals_values(context.technicals)
+    if context.company is not None:
+        if context.company.market_cap:
+            found.append(Known("market cap", "usd", float(context.company.market_cap), "context"))
+        if context.company.shares_outstanding:
+            found.append(Known("shares outstanding", "number", float(context.company.shares_outstanding), "context"))
     if context.events is not None:
         for r in context.events.recent_earnings:
             for name, label in (("eps_actual", "reported eps"), ("eps_estimate", "estimated eps"),
                                 ("revenue_actual", "reported revenue"), ("revenue_estimate", "estimated revenue")):
                 if getattr(r, name) is not None:
                     found.append(Known(label, "usd", float(getattr(r, name)), "context"))
+    return found
+
+
+def _technicals_values(t) -> list[Known]:
+    found = [Known("technicals close", "usd", t.close, "context")]
+    for name in ("sma_20", "sma_50", "sma_200", "ema_10", "high_52w", "low_52w"):
+        if getattr(t, name) is not None:
+            found.append(Known(f"technicals {name}", "usd", float(getattr(t, name)), "context"))
+    for name in ("rsi_14", "volume", "volume_avg_50d"):
+        if getattr(t, name) is not None:
+            found.append(Known(f"technicals {name}", "number", float(getattr(t, name)), "context"))
+    if t.macd is not None:
+        found += [Known(f"technicals macd {n}", "number", float(v), "context")
+                  for n, v in (("line", t.macd.line), ("signal", t.macd.signal), ("histogram", t.macd.histogram))
+                  if v is not None]
+    for name, value in derive_technicals(t).items():
+        label = (name.replace("pct_vs_", "pct vs ").replace("pct_from_", "pct from ")
+                 if name.startswith("pct_") else name.replace("_", " "))
+        found.append(Known(label, "x" if name == "volume_vs_average" else "pct", float(value), "context"))
     return found
 
 

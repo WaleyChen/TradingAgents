@@ -11,7 +11,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from tradingagents.context.models import Balance, Context, Events, Financials, Price, Statement
+from tradingagents.context.models import (
+    Balance,
+    Company,
+    Context,
+    Events,
+    Financials,
+    Price,
+    Statement,
+    Technicals,
+)
 
 # How long each kind of period runs, in days.
 _DAYS = {"standalone": (60, 120), "ytd": (120, 300), "annual": (300, 400)}
@@ -114,6 +123,8 @@ def _balance(b: Balance, path: str) -> list[Problem]:
         if abs(b.total_assets - claimed) > _TOLERANCE * abs(b.total_assets):
             found.append(Problem("balance_mismatch", path, f"{b.fiscal_period}: assets {_money(b.total_assets)} "
                                  f"do not equal liabilities plus equity {_money(claimed)}"))
+    if None not in (b.total_debt, b.total_liabilities) and b.total_debt > b.total_liabilities:
+        found.append(Problem("balance_order", path, f"{b.fiscal_period}: debt exceeds total liabilities"))
     for part, whole in (("current_assets", "total_assets"), ("current_liabilities", "total_liabilities")):
         if None not in (getattr(b, part), getattr(b, whole)) and getattr(b, part) > getattr(b, whole):
             found.append(Problem("balance_order", path,
@@ -175,6 +186,41 @@ def check_price(p: Price, trade_date: date) -> list[Problem]:
     return []
 
 
+_MARKET_CAP_TOLERANCE = 0.03   # the cap and the close may be dated a day apart
+
+
+def check_company(c: Company, price: Price | None) -> list[Problem]:
+    if c.market_cap and c.shares_outstanding and price is not None:
+        implied = price.close * c.shares_outstanding
+        if abs(implied - c.market_cap) > _MARKET_CAP_TOLERANCE * c.market_cap:
+            return [Problem("market_cap_mismatch", "company.market_cap",
+                            f"market cap {_money(c.market_cap)} is not the price {price.close} times "
+                            f"{c.shares_outstanding:,} shares ({_money(implied)})")]
+    return []
+
+
+_TIE_TOLERANCE = 0.005
+
+
+def check_technicals(t: Technicals, price: Price | None, trade_date: date | None) -> list[Problem]:
+    found, m = [], t.macd
+    if m is not None and None not in (m.line, m.signal, m.histogram) \
+            and abs(m.histogram - (m.line - m.signal)) > max(0.02, 0.01 * max(abs(m.line), abs(m.signal))):
+        found.append(Problem("macd_inconsistent", "technicals.macd",
+                             f"MACD histogram {m.histogram} is not the line {m.line} less the signal {m.signal}"))
+    if (t.high_52w and t.close > t.high_52w * (1 + _TIE_TOLERANCE)) \
+            or (t.low_52w and t.close < t.low_52w * (1 - _TIE_TOLERANCE)):
+        found.append(Problem("range_inconsistent", "technicals.close",
+                             f"close {t.close} is outside the 52-week range {t.low_52w}-{t.high_52w}"))
+    if price is not None and price.as_of == t.as_of and abs(t.close - price.close) > _TIE_TOLERANCE * price.close:
+        found.append(Problem("technicals_price_mismatch", "technicals.close",
+                             f"technicals close {t.close} is not the price {price.close} on {t.as_of}"))
+    if trade_date is not None and (t.as_of > trade_date or t.as_of < trade_date - timedelta(days=_PRICE_WINDOW_DAYS)):
+        found.append(Problem("technicals_date", "technicals.as_of", f"the technicals are dated {t.as_of}, which does "
+                             f"not stand for the run date {trade_date} (within {_PRICE_WINDOW_DAYS} days before it)"))
+    return found
+
+
 def check_events(e: Events) -> list[Problem]:
     found = []
     if e.next_earnings is not None and e.next_earnings.date <= e.as_of:
@@ -197,11 +243,16 @@ def check_events(e: Events) -> list[Problem]:
 def check_context(context: Context, *, ticker: str | None = None, trade_date: date | None = None) -> list[Problem]:
     """Every problem with the context, including ties to the request when it is given."""
     found = []
-    blocks = [("financials", context.financials), ("price", context.price), ("events", context.events)]
+    blocks = [("financials", context.financials), ("price", context.price), ("events", context.events),
+              ("company", context.company), ("technicals", context.technicals)]
     if context.financials is not None:
         found += check_financials(context.financials)
     if context.events is not None:
         found += check_events(context.events)
+    if context.company is not None:
+        found += check_company(context.company, context.price)
+    if context.technicals is not None:
+        found += check_technicals(context.technicals, context.price, trade_date)
     if ticker is not None:
         found += [Problem("ticker_mismatch", f"{name}.ticker",
                           f"{name} is for {block.ticker}, but the request is for {ticker}")
@@ -214,6 +265,9 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
     if trade_date is not None:
         if context.price is not None:
             found += check_price(context.price, trade_date)
+        if context.company is not None and context.company.as_of > trade_date:
+            found.append(Problem("as_of_after_trade_date", "company.as_of",
+                                 f"the company data is dated {context.company.as_of}, after the run date {trade_date}"))
         if context.events is not None and context.events.as_of > trade_date:
             found.append(Problem("as_of_after_trade_date", "events.as_of",
                                  f"the events are dated {context.events.as_of}, after the run date {trade_date}"))
