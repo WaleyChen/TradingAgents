@@ -115,7 +115,14 @@ def derive_technicals(t: Technicals) -> dict[str, float]:
     return {name: value for name, value in metrics.items() if value is not None}
 
 
-def derive_ownership(o: Ownership) -> dict[str, int]:
+def sale_share_of_holding(t) -> float | None:
+    """The percent of the shares held before a sale that it sold; None for a buy or an unknown holding."""
+    if t.kind != "sale" or t.shares_owned_after is None:
+        return None
+    return t.shares / (t.shares + t.shares_owned_after) * 100
+
+
+def derive_ownership(o: Ownership) -> dict[str, float]:
     """Counts the report may state, taken from the lists in code. Fund counts cover the listed holders only."""
     out: dict[str, int] = {}
     if o.funds is not None:
@@ -126,6 +133,13 @@ def derive_ownership(o: Ownership) -> dict[str, int]:
     if o.insiders is not None:
         out.update(insider_buys=o.insiders.buys, insider_sells=o.insiders.sells,
                    insider_window_days=o.insiders.window_days)
+        shares = [p for p in map(sale_share_of_holding, o.insiders.trades) if p is not None]
+        if shares:
+            out["insider_largest_sale_pct"] = max(shares)
+        sales = [t for t in o.insiders.trades if t.kind == "sale" and t.under_10b5_1_plan is not None]
+        if sales:
+            out["insider_sales_flag_known"] = len(sales)
+            out["insider_sales_planned"] = sum(t.under_10b5_1_plan for t in sales)
         if o.insiders.net_value_usd is not None:
             out["insider_net_value"] = o.insiders.net_value_usd
     if o.congress is not None:

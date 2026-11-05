@@ -14,6 +14,7 @@ from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
     ONE_VOICE,
     SOURCED_NUMBERS,
+    UNEXPLAINED,
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -62,6 +63,7 @@ def create_trader(llm):
                     + NO_EXTERNAL_TOOLS
                     + " " + ONE_VOICE
                     + " " + SOURCED_NUMBERS
+                    + " " + UNEXPLAINED
                     + get_language_instruction()
                 ),
             },

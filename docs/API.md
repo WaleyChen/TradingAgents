@@ -150,7 +150,8 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
       "trades": [{ "name": "Jane Doe", "title": "Director", "is_director": true,
                    "transaction_date": "2026-10-02", "filing_date": "2026-10-04", "kind": "sale",
                    "shares": 5000, "price_per_share": 820.0, "value_usd": 4100000,
-                   "shares_owned_after": 40000, "form_type": "4" }] },
+                   "shares_owned_after": 40000, "form_type": "4",
+                   "under_10b5_1_plan": true, "from_option_exercise": false }] },
     "congress": { "source": "congress_disclosures", "window_days": 90, "buys": 1, "sells": 0,
       "trades": [{ "member": "Dan Newhouse", "chamber": "House", "district": "WA04", "owner": "spouse",
                    "side": "buy", "traded_on": "2026-07-10", "disclosed_on": "2026-08-15",
@@ -219,6 +220,11 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   the service works out in code how far the price has moved and whether that is toward or away from the
   old target. A buy-side rating needs a target above `price_then` and a sell-side one below it. Each
   report must be dated before the run date.
+- Each insider trade may carry `under_10b5_1_plan` (the Form 4 checkbox) and `from_option_exercise`, both
+  strict `true` / `false`, omitted or `null` when unknown. The service works out in code how much of their
+  direct holding a sale was, `shares / (shares + shares_owned_after)`, and the agents are told that share, the
+  plan status and any option exercise, so a small sale under a pre-arranged plan is not mistaken for an
+  executive leaving. Nothing is stated about a flag you did not send.
 - `ownership` has three optional parts: `funds` (13F positions, up to 10 holders), `insiders`
   (Form 4 open-market buys and sales, up to 20 trades) and `congress` (up to 20 trades). Nothing may
   be dated after `as_of`; the insider window runs on `transaction_date` and the Congress window on

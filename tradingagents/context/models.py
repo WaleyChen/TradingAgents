@@ -228,6 +228,8 @@ class InsiderTrade(_Strict):
     value_usd: Amount
     shares_owned_after: Annotated[int | None, Field(default=None, ge=0, lt=10**13)]
     form_type: Annotated[str, Field(min_length=1, max_length=10)]
+    under_10b5_1_plan: Annotated[bool | None, Field(strict=True)] = None       # the Form 4 checkbox; None if unknown
+    from_option_exercise: Annotated[bool | None, Field(strict=True)] = None    # from exercising options; None if unknown
 
 
 class Insiders(_Strict):

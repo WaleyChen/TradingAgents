@@ -55,6 +55,13 @@ SOURCED_NUMBERS = (
     "calculation as derived, and a figure the data did not confirm as unverified."
 )
 
+# A sharp move the data does not explain is a question, not a finding.
+UNEXPLAINED = (
+    "When a figure moves sharply and the data you were given does not say why, call it unexplained: do not "
+    "blame competition, demand or any other cause, and do not build your conclusion on a cause you have not "
+    "seen. Say what could explain it and where to look, such as the earnings release or the notes to the filing."
+)
+
 # Social posts are weak, unaccountable evidence: use them as a small supporting signal.
 NO_HANDLES = (
     "Treat social-media sentiment as a small supporting signal, never the main basis "

@@ -2,7 +2,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from tradingagents.agents.analysts.turn import take_turn
 from tradingagents.agents.context import get_instrument_context_from_state, get_language_instruction
-from tradingagents.agents.structured import SOURCED_NUMBERS
+from tradingagents.agents.structured import SOURCED_NUMBERS, UNEXPLAINED
 from tradingagents.agents.tools import (
     get_balance_sheet,
     get_cashflow,
@@ -31,6 +31,7 @@ def create_fundamentals_analyst(llm):
             + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
             + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements, and `get_insider_transactions` for recent insider buying and selling."
             + " " + SOURCED_NUMBERS
+            + " " + UNEXPLAINED
             + get_language_instruction()
         )
 

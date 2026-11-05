@@ -17,7 +17,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from tradingagents.context import Context, derive_metrics
-from tradingagents.context.derive import derive_ownership, derive_technicals
+from tradingagents.context.derive import derive_ownership, derive_technicals, sale_share_of_holding
 from tradingagents.plan.check import Readings
 
 Unit = Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
@@ -198,6 +198,8 @@ def _ownership_values(o) -> list[Known]:
         found += [Known("insider trade shares", "number", float(t.shares), "context"),
                   Known("insider trade price", "usd", t.price_per_share, "context")]
         found += [Known("insider trade value", "usd", float(t.value_usd), "context")] if t.value_usd is not None else []
+        share = sale_share_of_holding(t)
+        found += [Known("insider sale share of holding", "pct", share, "context")] if share is not None else []
     for t in (o.congress.trades if o.congress else []):
         found += [Known("congress amount minimum", "usd", float(t.amount_min), "context"),
                   Known("congress amount maximum", "usd", float(t.amount_max), "context")]

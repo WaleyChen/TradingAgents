@@ -23,6 +23,7 @@ from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
     NO_HANDLES,
     ONE_VOICE,
+    UNEXPLAINED,
     bind_structured,
     invoke_structured,
 )
@@ -133,6 +134,8 @@ date in the text only when the date itself matters ("as of the quarter ended Sep
 
 The page defines these terms for the reader, so you may use them: {_TERMS}. Explain any other jargon
 in a few words, or use a plain word instead.
+
+{UNEXPLAINED}
 
 {ONE_VOICE} {NO_HANDLES}
 {NO_EXTERNAL_TOOLS}

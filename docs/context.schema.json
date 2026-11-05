@@ -975,6 +975,18 @@
           "title": "Form Type",
           "type": "string"
         },
+        "from_option_exercise": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From Option Exercise"
+        },
         "is_director": {
           "title": "Is Director",
           "type": "boolean"
@@ -1029,6 +1041,18 @@
           "format": "date",
           "title": "Transaction Date",
           "type": "string"
+        },
+        "under_10b5_1_plan": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Under 10B5 1 Plan"
         },
         "value_usd": {
           "anyOf": [

@@ -258,3 +258,66 @@ def test_ownership_figures_can_be_cited_as_verified():
 @pytest.mark.unit
 def test_the_request_context_accepts_ownership():
     assert Context.model_validate({"ownership": OWNERSHIP}).ownership.insiders.sells == 4
+
+
+# --- insider context: how much of their holding, and under what plan -------------
+
+def _flagged(*flags):
+    data = copy.deepcopy(OWNERSHIP)
+    for trade, (plan, exercise) in zip(data["insiders"]["trades"], flags, strict=False):
+        trade.update(under_10b5_1_plan=plan, from_option_exercise=exercise)
+    return Ownership.model_validate(data)
+
+
+@pytest.mark.unit
+def test_the_plan_and_exercise_flags_are_optional_booleans():
+    assert Ownership.model_validate(OWNERSHIP).insiders.trades[0].under_10b5_1_plan is None
+    t = _flagged((True, False)).insiders.trades[0]
+    assert t.under_10b5_1_plan is True and t.from_option_exercise is False
+    with pytest.raises(ValidationError):
+        mutate("insiders", "trades", 0, "under_10b5_1_plan", "yes")
+
+
+@pytest.mark.unit
+def test_how_much_of_their_holding_a_sale_was_is_worked_out_in_code():
+    text = render_context(Context(ownership=ownership()))
+    assert "about 11% of the shares they held directly" in text            # 5,000 of 45,000
+    assert "about 7.0% of the shares they held directly" in text           # 3,000 of 43,000
+    m = derive_ownership(ownership())
+    assert m["insider_largest_sale_pct"] == pytest.approx(10 / 50 * 100, abs=0.1)   # CEO: 10,000 of 50,000
+
+
+@pytest.mark.unit
+def test_no_percentage_is_made_up_when_the_holding_after_the_sale_is_unknown():
+    data = copy.deepcopy(OWNERSHIP)
+    for trade in data["insiders"]["trades"]:
+        trade["shares_owned_after"] = None
+    text = render_context(Context(ownership=Ownership.model_validate(data)))
+    assert "of the shares they held" not in text
+    assert "insider_largest_sale_pct" not in derive_ownership(Ownership.model_validate(data))
+
+
+@pytest.mark.unit
+def test_a_planned_sale_and_an_option_exercise_are_said_so_and_nothing_is_guessed_when_unknown():
+    text = render_context(Context(ownership=_flagged((True, False), (False, True), (None, None))))
+    lines = [line for line in text.splitlines() if line.startswith("- 2026-")]
+    insider = [line for line in lines if "sold" in line and "shares at" in line]
+    assert "under a pre-arranged 10b5-1 trading plan" in insider[0]
+    assert "not marked as a 10b5-1 plan sale" in insider[1] and "after exercising options" in insider[1]
+    assert "10b5-1" not in insider[2] and "exercising" not in insider[2]
+
+
+@pytest.mark.unit
+def test_the_digest_counts_planned_sales_only_when_the_flag_is_known():
+    plain = render_role_blocks(Context(ownership=ownership()))["decision"]
+    assert "10b5-1" not in plain
+    flagged = render_role_blocks(Context(ownership=_flagged((True, False), (True, False), (False, False),
+                                                            (True, False))))["decision"]
+    assert "3 of the 4 listed sales were under 10b5-1 plans" in flagged
+    assert derive_ownership(_flagged((True, False), (None, None)))["insider_sales_planned"] == 1
+
+
+@pytest.mark.unit
+def test_the_share_of_a_holding_sold_can_be_cited_as_verified():
+    known = known_values(Context(ownership=ownership()), None, None)
+    assert any(k.label == "insider sale share of holding" and k.kind == "pct" and abs(k.value - 11.1) < 0.1 for k in known)

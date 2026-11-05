@@ -23,6 +23,7 @@ from tradingagents.agents.structured import (
     NO_HANDLES,
     ONE_VOICE,
     SOURCED_NUMBERS,
+    UNEXPLAINED,
 )
 from tradingagents.agents.trader.trader import create_trader
 
@@ -62,6 +63,7 @@ def test_trader_prompt_states_constraint():
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
     assert ONE_VOICE in _prompt_text(captured["prompt"])
     assert SOURCED_NUMBERS in _prompt_text(captured["prompt"])
+    assert UNEXPLAINED in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -85,6 +87,7 @@ def test_research_manager_prompt_states_constraint():
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
     assert ONE_VOICE in _prompt_text(captured["prompt"])
     assert SOURCED_NUMBERS in _prompt_text(captured["prompt"])
+    assert UNEXPLAINED in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -115,6 +118,7 @@ def test_portfolio_manager_prompt_states_constraint():
     assert NO_EXTERNAL_TOOLS in _prompt_text(captured["prompt"])
     assert ONE_VOICE in _prompt_text(captured["prompt"])
     assert SOURCED_NUMBERS in _prompt_text(captured["prompt"])
+    assert UNEXPLAINED in _prompt_text(captured["prompt"])
 
 
 @pytest.mark.unit
@@ -201,3 +205,12 @@ def test_the_portfolio_managers_target_may_not_be_a_technical_level():
 
     description = PortfolioDecision.model_fields["price_target"].description
     assert "never a moving average or support level" in description
+
+
+@pytest.mark.unit
+def test_the_deciders_and_analysts_are_told_an_unexplained_move_is_a_question_not_a_conclusion():
+    import tradingagents.agents.analysts.fundamentals_analyst as fundamentals
+    import tradingagents.agents.analysts.news_analyst as news
+    assert "do not blame" in " ".join(UNEXPLAINED.split()).lower() and "unexplained" in UNEXPLAINED
+    for module in (fundamentals, news):
+        assert "UNEXPLAINED" in inspect.getsource(module)

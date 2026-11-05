@@ -8,6 +8,7 @@ from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
     ONE_VOICE,
     SOURCED_NUMBERS,
+    UNEXPLAINED,
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -50,7 +51,7 @@ Write these sections, in this order, starting with the recommendation on its own
 - **Rationale**: which arguments decided it
 - **Strategic Actions**: concrete steps for the trader, sized against a standard allocation
 
-{NO_EXTERNAL_TOOLS} {ONE_VOICE} {SOURCED_NUMBERS}""" + get_language_instruction()
+{NO_EXTERNAL_TOOLS} {ONE_VOICE} {SOURCED_NUMBERS} {UNEXPLAINED}""" + get_language_instruction()
 
         investment_plan = invoke_structured_or_freetext(
             structured_llm,

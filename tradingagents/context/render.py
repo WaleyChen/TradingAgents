@@ -9,6 +9,7 @@ from tradingagents.context.derive import (
     derive_ownership,
     derive_prior_reports,
     derive_technicals,
+    sale_share_of_holding,
 )
 from tradingagents.context.models import (
     Balance,
@@ -143,9 +144,15 @@ def _insider(t) -> str:
     verb = "bought" if t.kind == "buy" else "sold"
     value = f" ({_money(t.value_usd)})" if t.value_usd is not None else ""
     after = f"; owns {t.shares_owned_after:,} shares after" if t.shares_owned_after is not None else ""
+    share = sale_share_of_holding(t)
+    held = (f", about {share:.0f}% of the shares they held directly" if share is not None and share >= 10
+            else f", about {share:.1f}% of the shares they held directly" if share is not None else "")
+    plan = (", under a pre-arranged 10b5-1 trading plan" if t.under_10b5_1_plan
+            else ", not marked as a 10b5-1 plan sale" if t.under_10b5_1_plan is False else "")
+    exercise = ", after exercising options" if t.from_option_exercise else ""
     title = _name(t.title)
     return (f"- {t.transaction_date}: {_article(title)} {title} {verb} {t.shares:,} shares at "
-            f"${t.price_per_share:,.2f}{value}; filed {t.filing_date}{after}")
+            f"${t.price_per_share:,.2f}{value}{held}{plan}{exercise}; filed {t.filing_date}{after}")
 
 
 _OWNER = {"self": "", "spouse": "'s spouse", "dependent": "'s dependent", "joint": " (joint account)"}
@@ -187,6 +194,11 @@ def _ownership_digest(o: Ownership) -> list[str]:
         net = f", net {_money(o.insiders.net_value_usd)}" if o.insiders.net_value_usd is not None else ""
         lines.append(f"Insiders (open-market): {m['insider_buys']} insider buys and {m['insider_sells']} insider "
                      f"sales in {m['insider_window_days']} days{net}.")
+        if "insider_sales_flag_known" in m:
+            known, planned = m["insider_sales_flag_known"], m["insider_sales_planned"]
+            listed = sum(t.kind == "sale" for t in o.insiders.trades)
+            lines.append(f"{planned} of the {known} listed sales {'were' if known == listed else 'with a known plan status were'}"
+                         " under 10b5-1 plans.")
     if o.funds is not None:
         lines.append(
             f"Funds (13F, quarter ended {o.funds.quarter_end}; not recent): of the funds we track "

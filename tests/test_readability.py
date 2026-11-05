@@ -11,7 +11,7 @@ from api.schemas import CreateAnalysisRequest
 from api.service import AnalysisResult
 from tests.test_job_store import _wait
 from tests.test_report_summary import MAX_WORDS, STATE, StructuredLLM, _draft, _words
-from tradingagents.agents.structured import SOURCED_NUMBERS
+from tradingagents.agents.structured import SOURCED_NUMBERS, UNEXPLAINED
 from tradingagents.glossary import GLOSSARY, glossary_for
 from tradingagents.readability import readability_problems
 from tradingagents.report_summary import TARGET_WORDS, create_summary_node, write_summary
@@ -189,3 +189,8 @@ def test_the_prompt_asks_for_each_rounded_number_to_be_listed_with_its_exact_val
     prompt = _prompt()
     assert "list each one in `figures` with its exact value" in prompt
     assert "not in the sentences" not in prompt          # that wording made a model return no figures at all
+
+
+@pytest.mark.unit
+def test_the_summary_is_told_an_unexplained_move_is_a_question_not_a_conclusion():
+    assert " ".join(UNEXPLAINED.split()) in _prompt()
