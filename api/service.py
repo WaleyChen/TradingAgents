@@ -21,6 +21,8 @@ class AnalysisResult(NamedTuple):
     plan: dict[str, Any] | None = None
     plan_error: str | None = None
     summary: str | None = None
+    summary_figures: list[dict[str, Any]] | None = None
+    summary_problems: list[dict[str, str]] | None = None
 
 
 def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
@@ -32,6 +34,7 @@ def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
         config["report_summary"] = True  # and a short summary
     if request.context is not None:
         config["verified_context"] = render_context(request.context)
+        config["context_data"] = request.context.model_dump(mode="json")
     config["memory_n_cross"] = 0  # a customer's report must not draw on other tickers' lessons
 
     if request.max_debate_rounds is not None:
@@ -93,4 +96,6 @@ def run_analysis(request: CreateAnalysisRequest) -> AnalysisResult:
         final_state.get("position_plan"),
         final_state.get("plan_error"),
         final_state.get("report_summary"),
+        final_state.get("summary_figures"),
+        final_state.get("summary_problems"),
     )

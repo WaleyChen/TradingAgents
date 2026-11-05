@@ -10,12 +10,16 @@ import pytest
 
 from api.jobs import JobManager
 from api.schemas import CreateAnalysisRequest
-from api.service import AnalysisResult
+from api.service import AnalysisResult, build_config
+from tests.test_context_financials import GOOD as FINANCIALS
+from tests.test_plan import GOOD as PLAN, READINGS
 from tradingagents.agents.structured import NO_HANDLES, ONE_VOICE, SOURCED_NUMBERS
+from tradingagents.context import Context
 from tradingagents.graph.conditional_logic import ConditionalLogic
 from tradingagents.graph.setup import GraphSetup
 from tradingagents.report_summary import MAX_WORDS, create_summary_node, word_count, write_summary
 from tradingagents.reporting import write_report_tree
+from tradingagents.summary_check import Figure, SummaryDraft, known_values
 
 STATE = {
     "company_of_interest": "ACME", "trade_date": "2026-11-02",
@@ -45,35 +49,64 @@ def _words(n):
     return " ".join(["word"] * n)
 
 
+CONTEXT = Context.model_validate({"financials": FINANCIALS})
+KNOWN = known_values(CONTEXT, READINGS, PLAN)
+
+
+class StructuredLLM:
+    """Binds structured output; answers each call with the next SummaryDraft."""
+
+    def __init__(self, *drafts):
+        self.drafts, self.prompts = list(drafts), []
+
+    def with_structured_output(self, schema):
+        return self
+
+    def invoke(self, prompt):
+        self.prompts.append(prompt)
+        reply = self.drafts.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+
+def _draft(text="A short summary.", *figures):
+    return SummaryDraft(text=text, figures=list(figures))
+
+
+NET_MARGIN = Figure(label="net margin", value=63.8, unit="pct", source="context")
+
+
 @pytest.mark.unit
 def test_a_summary_within_the_limit_is_returned_as_written():
     llm = ScriptedLLM(_words(580))
-    assert write_summary(llm, "material") == _words(580)
+    assert write_summary(llm, "material").text == _words(580)
     assert len(llm.prompts) == 1
 
 
 @pytest.mark.unit
 def test_a_summary_that_runs_long_is_asked_for_again_with_its_length():
     llm = ScriptedLLM(_words(MAX_WORDS + 50), _words(590))
-    assert word_count(write_summary(llm, "material")) == 590
+    assert word_count(write_summary(llm, "material").text) == 590
     assert str(MAX_WORDS + 50) in llm.prompts[1]
 
 
 @pytest.mark.unit
 def test_a_summary_that_never_fits_is_dropped_not_cut_off():
     llm = ScriptedLLM(*[_words(MAX_WORDS + 50)] * 3)
-    assert write_summary(llm, "material") is None
+    outcome = write_summary(llm, "material")
+    assert outcome.text is None and [p["code"] for p in outcome.problems] == ["too_long"]
 
 
 @pytest.mark.unit
 def test_an_empty_reply_is_not_a_summary():
-    assert write_summary(ScriptedLLM("  ", "  ", "  "), "material") is None
+    assert write_summary(ScriptedLLM("  ", "  ", "  "), "material").text is None
 
 
 @pytest.mark.unit
 def test_a_failing_model_gives_no_summary_and_no_leaked_error_text():
     node = create_summary_node(ScriptedLLM(RuntimeError("sk-SECRET")))
-    assert node(STATE) == {"report_summary": None}
+    assert node(STATE) == {"report_summary": None, "summary_figures": None, "summary_problems": []}
 
 
 @pytest.mark.unit
@@ -159,3 +192,143 @@ def test_the_summary_takes_its_target_from_the_plan_only():
     create_summary_node(llm)(STATE)
     prompt = llm.prompts[0]
     assert "the position plan's target" in prompt and "never call a moving average" in prompt
+
+
+@pytest.mark.unit
+def test_free_text_when_structured_output_is_unavailable_has_nothing_to_check():
+    outcome = write_summary(ScriptedLLM(_words(500)), "material", known=KNOWN)
+    assert outcome.text == _words(500) and outcome.figures is None and outcome.problems == []
+
+
+@pytest.mark.unit
+def test_a_summary_with_declared_and_matching_figures_comes_back_with_them_marked_verified():
+    llm = StructuredLLM(_draft("Net margin 63.8%.", NET_MARGIN))
+    outcome = write_summary(llm, "material", known=KNOWN)
+    assert outcome.text == "Net margin 63.8%." and outcome.problems == []
+    assert outcome.figures[0]["verified"] is True and outcome.figures[0]["label"] == "net margin"
+
+
+@pytest.mark.unit
+def test_an_undeclared_figure_is_sent_back_and_the_fix_is_accepted():
+    llm = StructuredLLM(_draft("Net margin 63.8% and a $500 target.", NET_MARGIN),
+                        _draft("Net margin 63.8%.", NET_MARGIN))
+    outcome = write_summary(llm, "material", known=KNOWN)
+    assert outcome.text == "Net margin 63.8%." and outcome.problems == []
+    assert "$500 appears in the text but is not in the figures list" in llm.prompts[1]
+
+
+@pytest.mark.unit
+def test_a_figure_that_is_not_in_its_source_is_sent_back_naming_it():
+    wrong = Figure(label="net margin", value=70.0, unit="pct", source="context")
+    llm = StructuredLLM(_draft("Net margin 70.0%.", wrong), _draft("Net margin 63.8%.", NET_MARGIN))
+    assert write_summary(llm, "material", known=KNOWN).text == "Net margin 63.8%."
+    assert "net margin: 70 (pct) is not in the context data" in llm.prompts[1]
+
+
+@pytest.mark.unit
+def test_figures_that_still_fail_after_the_retries_are_returned_with_the_problems():
+    wrong = Figure(label="net margin", value=70.0, unit="pct", source="context")
+    llm = StructuredLLM(*[_draft("Net margin 70.0%.", wrong)] * 3)
+    outcome = write_summary(llm, "material", known=KNOWN)
+    assert outcome.text == "Net margin 70.0%." and len(llm.prompts) == 3
+    assert [p["code"] for p in outcome.problems] == ["figure_not_in_source"]
+    assert outcome.figures[0]["verified"] is False
+
+
+@pytest.mark.unit
+def test_a_structured_summary_that_never_fits_the_length_is_dropped():
+    llm = StructuredLLM(*[_draft(_words(MAX_WORDS + 50))] * 3)
+    outcome = write_summary(llm, "material", known=KNOWN)
+    assert outcome.text is None and outcome.problems[0]["code"] == "too_long"
+
+
+@pytest.mark.unit
+def test_a_structured_miss_falls_back_to_free_text():
+    class Missing(StructuredLLM):
+        def invoke(self, prompt):
+            if prompt not in self.prompts:
+                self.prompts.append(prompt)
+                raise ValueError("no parse")
+            return MagicMock(content="Plain summary.")
+
+    outcome = write_summary(Missing(), "material", known=KNOWN)
+    assert outcome.text == "Plain summary." and outcome.figures is None
+
+
+@pytest.mark.unit
+def test_the_prompt_asks_for_every_figure_with_its_source():
+    llm = StructuredLLM(_draft())
+    write_summary(llm, "material", known=KNOWN)
+    prompt = llm.prompts[0]
+    for expected in ("figures", "usd_billions", "context", "readings", "plan", "analyst_report", "derived"):
+        assert expected in prompt
+
+
+@pytest.mark.unit
+def test_the_node_checks_against_the_context_the_readings_and_the_plan():
+    from dataclasses import asdict
+
+    state = {**STATE, "position_plan": PLAN, "verified_readings": asdict(READINGS)}
+    ok = Figure(label="target", value=300, unit="usd", source="plan")
+    node = create_summary_node(StructuredLLM(_draft("Net margin 63.8%, target $300.00.", NET_MARGIN, ok)), CONTEXT)
+    out = node(state)
+    assert out["report_summary"].startswith("Net margin") and out["summary_problems"] == []
+    assert [f["verified"] for f in out["summary_figures"]] == [True, True]
+
+
+@pytest.mark.unit
+def test_the_node_shows_the_model_the_supplied_data_and_the_readings():
+    from dataclasses import asdict
+
+    llm = StructuredLLM(_draft())
+    create_summary_node(llm, CONTEXT)({**STATE, "verified_readings": asdict(READINGS)})
+    prompt = llm.prompts[0]
+    assert "Verified data supplied by the caller" in prompt and "sec_xbrl" in prompt
+    assert "Verified market readings" in prompt and "sma_200" in prompt
+
+
+@pytest.mark.unit
+def test_a_plan_or_readings_that_do_not_parse_cannot_crash_the_node():
+    llm = StructuredLLM(_draft())
+    out = create_summary_node(llm, CONTEXT)({**STATE, "position_plan": {"bogus": 1},
+                                             "verified_readings": {"nonsense": 1}})
+    assert out["report_summary"] == "A short summary." and out["summary_problems"] == []
+
+
+@pytest.mark.unit
+def test_the_api_response_carries_the_figures_and_the_problems():
+    request = CreateAnalysisRequest(ticker="ACME", trade_date=date(2026, 11, 2))
+    figures = [{"label": "net margin", "value": 63.8, "unit": "pct", "source": "context",
+                "period": "FY2026", "verified": True}]
+    problems = [{"code": "undeclared_figure", "subject": "$5", "message": "$5 is not in the figures list"}]
+    manager = JobManager(runner=lambda r: AnalysisResult("Hold", {}, None, None, "S", figures, problems))
+    got = _wait(manager, manager.submit(request).id).to_response()
+    assert got.summary_figures[0].verified is True and got.summary_problems[0].code == "undeclared_figure"
+    manager = JobManager(runner=lambda r: ("Hold", {}))
+    got = _wait(manager, manager.submit(request).id).to_response()
+    assert got.summary_figures is None and got.summary_problems is None
+
+
+@pytest.mark.unit
+def test_the_api_hands_the_graph_the_parsed_context_for_the_checks():
+    request = CreateAnalysisRequest(ticker="MU", trade_date=date(2026, 11, 4),
+                                    context={"financials": FINANCIALS})
+    data = build_config(request)["context_data"]
+    assert Context.model_validate(data) == request.context
+
+
+@pytest.mark.unit
+def test_the_plan_step_passes_its_verified_readings_on_to_the_summary(monkeypatch):
+    from dataclasses import asdict
+
+    from tests.test_plan_generate import FakeLLM, _plan
+    from tradingagents.plan import node as plan_node_module
+    from tradingagents.plan.node import create_plan_node
+
+    monkeypatch.setattr(plan_node_module, "compute_readings", lambda symbol, as_of: READINGS)
+    out = create_plan_node(FakeLLM(_plan()))({"company_of_interest": "ACME", "trade_date": "2026-11-02",
+                                              "final_trade_decision": "Rating: Overweight", "final_rating": "Overweight"})
+    assert out["verified_readings"] == asdict(READINGS)
+    monkeypatch.setattr(plan_node_module, "compute_readings", lambda *a: (_ for _ in ()).throw(RuntimeError()))
+    assert create_plan_node(FakeLLM(_plan()))({"company_of_interest": "ACME", "trade_date": "d"
+                                               })["verified_readings"] is None

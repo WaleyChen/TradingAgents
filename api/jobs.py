@@ -23,6 +23,7 @@ from api.schemas import (
 )
 from api.service import AnalysisResult, run_analysis
 from tradingagents.context import context_digest
+from tradingagents.rating_label import plain_rating
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +42,15 @@ class AnalysisJob:
     plan: dict | None = None
     plan_error: str | None = None
     summary: str | None = None
+    summary_figures: list[dict] | None = None
+    summary_problems: list[dict] | None = None
     error: str | None = None
     created_at: datetime = field(default_factory=_utcnow)
     started_at: datetime | None = None
     completed_at: datetime | None = None
 
     def to_response(self) -> AnalysisJobResponse:
+        plain = plain_rating(self.decision)
         return AnalysisJobResponse(
             id=self.id,
             status=self.status,
@@ -55,11 +59,15 @@ class AnalysisJob:
             asset_type=self.request.asset_type,
             analysts=list(self.request.analysts),
             decision=self.decision,
+            rating_label=plain.label if plain else None,
+            rating_meaning=plain.meaning if plain else None,
             reports=AnalysisReports(**self.reports) if self.reports else None,
             plan=self.plan,
             plan_error=self.plan_error,
             context_digest=context_digest(self.request.context) if self.request.context else None,
             summary=self.summary,
+            summary_figures=self.summary_figures,
+            summary_problems=self.summary_problems,
             error=self.error,
             created_at=self.created_at,
             started_at=self.started_at,
@@ -124,7 +132,7 @@ class JobManager:
             request.trade_date,
         )
         try:
-            decision, reports, plan, plan_error, summary = AnalysisResult(*self._runner(request))
+            decision, reports, plan, plan_error, summary, figures, problems = AnalysisResult(*self._runner(request))
             with self._lock:
                 job = self._jobs[job_id]
                 job.decision = decision
@@ -132,6 +140,8 @@ class JobManager:
                 job.plan = plan
                 job.plan_error = plan_error
                 job.summary = summary
+                job.summary_figures = figures
+                job.summary_problems = problems
                 job.status = JobStatus.completed
                 job.completed_at = _utcnow()
             logger.info("Completed analysis job %s decision=%s", job_id, decision)

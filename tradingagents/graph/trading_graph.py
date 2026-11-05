@@ -10,6 +10,7 @@ from typing import Any
 import tradingagents
 from tradingagents.agents.context import build_instrument_context, resolve_instrument_identity
 from tradingagents.agents.rating import run_rating
+from tradingagents.context import Context
 from tradingagents.dataflows.config import run_config, run_config_context, set_config
 from tradingagents.dataflows.date_window import get_current_date, is_historical
 from tradingagents.dataflows.symbols import safe_ticker_component
@@ -112,7 +113,7 @@ class TradingAgentsGraph:
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         plan_node = create_plan_node(self.deep_thinking_llm) if self.config.get("structured_plan") else None
-        summary_node = create_summary_node(self.deep_thinking_llm) if self.config.get("report_summary") else None
+        summary_node = create_summary_node(self.deep_thinking_llm, self._supplied_context()) if self.config.get("report_summary") else None
         self.workflow = self.graph_setup.setup_graph(
             selected_analysts, memory_node=self._memory_step, plan_node=plan_node,
             summary_node=summary_node,
@@ -120,6 +121,11 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
         self._resuming = False
+
+    def _supplied_context(self) -> Context | None:
+        """The caller's verified data, when the run was given any (see ``api.service.build_config``)."""
+        data = self.config.get("context_data")
+        return Context.model_validate(data) if data else None
 
     def resolve_instrument_context(self, ticker: str, asset_type: str = "stock",
                                    trade_date: str | None = None) -> str:

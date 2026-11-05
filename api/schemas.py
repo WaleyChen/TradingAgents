@@ -88,6 +88,23 @@ class AnalysisAccepted(BaseModel):
         default=None, description="Fingerprint of the context as the service parsed it; null when none was sent.")
 
 
+class SummaryFigure(BaseModel):
+    label: str
+    value: float
+    unit: Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
+    source: Literal["context", "readings", "plan", "analyst_report", "derived"]
+    period: str | None = None
+    verified: bool = Field(
+        description="True only when the figure was checked in code against the supplied context, "
+                    "the market readings or the position plan.")
+
+
+class SummaryProblem(BaseModel):
+    code: str
+    subject: str
+    message: str
+
+
 class AnalysisReports(BaseModel):
     market_report: str | None = None
     sentiment_report: str | None = None
@@ -106,6 +123,10 @@ class AnalysisJobResponse(BaseModel):
     asset_type: AssetType
     analysts: list[AnalystName]
     decision: str | None = None
+    rating_label: str | None = Field(
+        default=None, description="The decision in plain words for retail readers: Strong Buy, Weak Buy, Hold, Weak Sell or Strong Sell.")
+    rating_meaning: str | None = Field(
+        default=None, description="One sentence on what the label means for someone who owns the stock and someone who doesn't.")
     reports: AnalysisReports | None = None
     plan: Plan | None = Field(
         default=None,
@@ -116,6 +137,14 @@ class AnalysisJobResponse(BaseModel):
     summary: str | None = Field(
         default=None,
         description="About 600 words in one analyst voice; null when the step is off or none fit the length limit.",
+    )
+    summary_figures: list[SummaryFigure] | None = Field(
+        default=None,
+        description="Every dollar, percent and multiple in the summary, with its source; null when none were declared.",
+    )
+    summary_problems: list[SummaryProblem] | None = Field(
+        default=None,
+        description="Figure checks the summary still fails; empty or null when it passed.",
     )
     error: str | None = None
     created_at: datetime

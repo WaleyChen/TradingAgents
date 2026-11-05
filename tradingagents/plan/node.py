@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import asdict
 
 from tradingagents.plan.generate import FAILED, generate_plan
 from tradingagents.plan.readings import compute_readings
@@ -17,7 +18,7 @@ def create_plan_node(llm):
             readings = compute_readings(ticker, trade_date)
         except Exception as exc:  # no data, vendor down: no plan, but the report stands
             logger.warning("Plan: no verified readings for %s on %s (%s)", ticker, trade_date, exc)
-            return {"position_plan": None,
+            return {"position_plan": None, "verified_readings": None,
                     "plan_error": "no verified market data to check a plan against"}
 
         try:
@@ -27,8 +28,8 @@ def create_plan_node(llm):
             )
         except Exception:  # the report is done; a bug here must not discard it
             logger.exception("Plan: unexpected failure for %s on %s", ticker, trade_date)
-            return {"position_plan": None, "plan_error": FAILED}
+            return {"position_plan": None, "plan_error": FAILED, "verified_readings": asdict(readings)}
         plan = outcome.plan.model_dump(mode="json") if outcome.plan else None
-        return {"position_plan": plan, "plan_error": outcome.error}
+        return {"position_plan": plan, "plan_error": outcome.error, "verified_readings": asdict(readings)}
 
     return plan_node
