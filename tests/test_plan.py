@@ -44,7 +44,7 @@ GOOD = {
     "target": {"price": 300.0, "method": "base_scenario", "basis": "Base-case value in 6 months."},
     "if_you_own": "Hold; add only on the entry levels below.",
     "if_you_dont": "Start small now and build on the entry levels.",
-    "watch": [{"what": "Next quarterly report: growth and capex", "when": "2026-12-10", "effect": "supports"}],
+    "watch": [{"what": "Gross margin holds above 75% in the next filing", "when": "2026-12-10", "effect": "supports"}],
     "confidence": "medium",
     "confidence_reason": "Strong fundamentals, but capex return is unproven.",
 }
@@ -56,8 +56,8 @@ def plan_with(**changes) -> dict:
     return data
 
 
-def problems(data: dict, readings: Readings = READINGS, rating: str | None = None) -> list[str]:
-    return check_plan(Plan.model_validate(data), readings, rating)
+def problems(data: dict, readings: Readings = READINGS, rating: str | None = None, **kw) -> list[str]:
+    return check_plan(Plan.model_validate(data), readings, rating, **kw)
 
 
 @pytest.mark.unit

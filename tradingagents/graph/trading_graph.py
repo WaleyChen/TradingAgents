@@ -112,8 +112,10 @@ class TradingAgentsGraph:
         self.selected_analysts = tuple(selected_analysts)
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
-        plan_node = create_plan_node(self.deep_thinking_llm) if self.config.get("structured_plan") else None
-        summary_node = create_summary_node(self.deep_thinking_llm, self._supplied_context()) if self.config.get("report_summary") else None
+        supplied = self._supplied_context()
+        plan_node = (create_plan_node(self.deep_thinking_llm, supplied.events if supplied else None)
+                     if self.config.get("structured_plan") else None)
+        summary_node = create_summary_node(self.deep_thinking_llm, supplied) if self.config.get("report_summary") else None
         self.workflow = self.graph_setup.setup_graph(
             selected_analysts, memory_node=self._memory_step, plan_node=plan_node,
             summary_node=summary_node,

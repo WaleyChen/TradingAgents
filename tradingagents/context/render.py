@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 
 from tradingagents.context.derive import derive_metrics
-from tradingagents.context.models import Balance, Context, Financials, Price, Statement
+from tradingagents.context.models import Balance, Context, Events, Financials, Price, Statement
 
 _GUIDANCE = (
     "Verified data supplied by the caller. The service checked these statements for "
@@ -75,10 +75,37 @@ def _financials(f: Financials, price: Price | None) -> list[str]:
     return lines
 
 
+def _events(e: Events) -> list[str]:
+    lines = [f"Events for {e.ticker} (source {e.source}, as of {e.as_of}):"]
+    nxt = e.next_earnings
+    if nxt is None:
+        lines.append("Next earnings: not supplied. Do not state or guess an earnings date.")
+    else:
+        state = "confirmed" if nxt.confirmed else "not confirmed"
+        lines.append(f"Next earnings: {nxt.date} ({nxt.fiscal_period}, {state}). This is the only date "
+                     "you may give for the next earnings report.")
+    for r in e.recent_earnings:
+        values = []
+        for name, label, money in (("eps_actual", "EPS", False), ("revenue_actual", "revenue", True)):
+            actual = getattr(r, name)
+            estimate = getattr(r, name.replace("actual", "estimate"))
+            if actual is None:
+                continue
+            shown = _money(actual) if money else f"${actual:,.2f}"
+            est = (_money(estimate) if money else f"${estimate:,.2f}") if estimate is not None else None
+            values.append(f"{label} {shown}" + (f" against an estimate of {est}" if est else ""))
+        missing = ("estimates not supplied" if r.eps_estimate is None and r.revenue_estimate is None else "")
+        detail = "; ".join([*values, *([missing] if missing else [])])
+        lines.append(f"- {r.fiscal_period} (period ended {r.period_end}, reported {r.reported_on}): {detail}")
+    return lines
+
+
 def render_context(context: Context) -> str:
     lines = [_GUIDANCE]
     if context.financials is not None:
         lines += ["", *_financials(context.financials, context.price)]
+    if context.events is not None:
+        lines += ["", *_events(context.events)]
     if context.price is not None:
         p = context.price
         lines += ["", f"Verified price for {p.ticker}: close ${p.close:,.2f} {p.currency} on {p.as_of} (source {p.source})."]

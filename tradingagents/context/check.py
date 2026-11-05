@@ -11,7 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from tradingagents.context.models import Balance, Context, Financials, Price, Statement
+from tradingagents.context.models import Balance, Context, Events, Financials, Price, Statement
 
 # How long each kind of period runs, in days.
 _DAYS = {"standalone": (60, 120), "ytd": (120, 300), "annual": (300, 400)}
@@ -175,23 +175,48 @@ def check_price(p: Price, trade_date: date) -> list[Problem]:
     return []
 
 
+def check_events(e: Events) -> list[Problem]:
+    found = []
+    if e.next_earnings is not None and e.next_earnings.date <= e.as_of:
+        found.append(Problem("earnings_date_passed", "events.next_earnings.date",
+                             f"the next earnings date {e.next_earnings.date} is not after as_of {e.as_of}"))
+    for i, r in enumerate(e.recent_earnings):
+        path = f"events.recent_earnings[{i}]"
+        if r.reported_on < r.period_end:
+            found.append(Problem("reported_before_period_end", f"{path}.reported_on",
+                                 f"{r.fiscal_period}: reported before its period ended"))
+        if r.reported_on > e.as_of:
+            found.append(Problem("reported_after_as_of", f"{path}.reported_on",
+                                 f"{r.fiscal_period}: reported after as_of"))
+    labels = [r.fiscal_period.strip().lower() for r in e.recent_earnings]
+    for label in sorted({x for x in labels if labels.count(x) > 1}):
+        found.append(Problem("duplicate_period", "events.recent_earnings", f"{label} appears twice"))
+    return found
+
+
 def check_context(context: Context, *, ticker: str | None = None, trade_date: date | None = None) -> list[Problem]:
     """Every problem with the context, including ties to the request when it is given."""
     found = []
-    blocks = [("financials", context.financials), ("price", context.price)]
+    blocks = [("financials", context.financials), ("price", context.price), ("events", context.events)]
     if context.financials is not None:
         found += check_financials(context.financials)
+    if context.events is not None:
+        found += check_events(context.events)
     if ticker is not None:
         found += [Problem("ticker_mismatch", f"{name}.ticker",
                           f"{name} is for {block.ticker}, but the request is for {ticker}")
                   for name, block in blocks if block is not None and block.ticker != ticker]
-    elif context.financials is not None and context.price is not None \
-            and context.financials.ticker != context.price.ticker:
-        found.append(Problem("ticker_mismatch", "price.ticker",
-                             f"price is for {context.price.ticker}, but financials are for {context.financials.ticker}"))
+    else:
+        present = [(name, block) for name, block in blocks if block is not None]
+        found += [Problem("ticker_mismatch", f"{name}.ticker",
+                          f"{name} is for {block.ticker}, but {present[0][0]} is for {present[0][1].ticker}")
+                  for name, block in present[1:] if block.ticker != present[0][1].ticker]
     if trade_date is not None:
         if context.price is not None:
             found += check_price(context.price, trade_date)
+        if context.events is not None and context.events.as_of > trade_date:
+            found.append(Problem("as_of_after_trade_date", "events.as_of",
+                                 f"the events are dated {context.events.as_of}, after the run date {trade_date}"))
         if context.financials is not None and context.financials.as_of > trade_date:
             found.append(Problem("as_of_after_trade_date", "financials.as_of",
                                  f"the financials are dated {context.financials.as_of}, after the run date {trade_date}"))

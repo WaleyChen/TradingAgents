@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from tradingagents.agents.context import get_language_instruction
 from tradingagents.agents.structured import NO_EXTERNAL_TOOLS, bind_structured
+from tradingagents.context import Events
 from tradingagents.plan.check import Readings, check_plan
 from tradingagents.plan.models import MAX_LEGS, MAX_PCT, Plan
 
@@ -58,7 +59,9 @@ Rules the plan must satisfy:
    null; the service computes it.
 9. `if_you_own` and `if_you_dont` are one sentence each, so a trim is never mistaken for a short.
 10. `watch` lists one to five measurable things that would change the view, each
-    supporting or weakening it, with a date after today when it has one.
+    supporting or weakening it, with a date after today when it has one. A watch item
+    about earnings may carry only the earnings date given below, or no date at all;
+    never make up an earnings date.
 
 Triggers come from this closed list; write nothing else:
 - {{"price": {{"when": "at_or_below" | "at_or_above", "value": N}}}}
@@ -103,7 +106,17 @@ def _already_true(r: Readings) -> str:
     return "\n".join(lines) or "- none"
 
 
-def _prompt(decision: str, rating: str, readings: Readings, problems: list[str]) -> str:
+def _earnings_line(events: Events | None) -> str:
+    nxt = events.next_earnings if events is not None else None
+    if nxt is None:
+        return "Earnings date: not supplied. Do not give a date to any watch item about earnings."
+    state = "confirmed" if nxt.confirmed else "not confirmed"
+    return (f"Earnings date: Next earnings are on {nxt.date} ({state}) for {nxt.fiscal_period}. "
+            "A watch item about earnings carries exactly this date or none.")
+
+
+def _prompt(decision: str, rating: str, readings: Readings, problems: list[str],
+            events: Events | None = None) -> str:
     retry = ""
     if problems:
         listed = "\n".join(f"- {p}" for p in problems)
@@ -112,7 +125,7 @@ def _prompt(decision: str, rating: str, readings: Readings, problems: list[str])
             f"indicator values; a trigger on an unavailable reading is not allowed):\n"
             f"{_readings_block(readings)}\n\nAlready true now (a trigger of this form would fire "
             f"at once, so never use it; pick the opposite form or a price level):\n"
-            f"{_already_true(readings)}\n\nFinal decision:\n{decision}\n{retry}\n"
+            f"{_already_true(readings)}\n\n{_earnings_line(events)}\n\nFinal decision:\n{decision}\n{retry}\n"
             f"{NO_EXTERNAL_TOOLS}{get_language_instruction()}")
 
 
@@ -132,17 +145,18 @@ def _anchor(plan: Plan, readings: Readings) -> Plan:
 
 
 def generate_plan(llm, *, decision: str, rating: str, readings: Readings,
-                  max_retries: int = DEFAULT_RETRIES) -> PlanOutcome:
+                  events: Events | None = None, max_retries: int = DEFAULT_RETRIES) -> PlanOutcome:
     """Plan for ``decision``, retried with the failed checks, or an error and no plan."""
     structured = bind_structured(llm, Plan, "Plan")
     if structured is None:
         return PlanOutcome(None, "the model provider does not support structured output", 0)
 
+    next_earnings = events.next_earnings.date if events is not None and events.next_earnings else None
     problems: list[str] = []          # what the model is told on the next try
     shown = NOT_VALID                 # what the caller is told if every try fails
     for attempt in range(1, max_retries + 2):
         try:
-            plan = structured.invoke(_prompt(decision, rating, readings, problems))
+            plan = structured.invoke(_prompt(decision, rating, readings, problems, events))
             if plan is None:
                 raise ValueError("the model returned no plan")
             plan = _anchor(plan, readings)
@@ -153,7 +167,7 @@ def generate_plan(llm, *, decision: str, rating: str, readings: Readings,
         except Exception as exc:  # auth, quota, network: retrying will not help
             logger.warning("Plan: attempt %d failed (%s: %s)", attempt, type(exc).__name__, exc)
             return PlanOutcome(None, FAILED, attempt)
-        problems = check_plan(plan, readings, rating)
+        problems = check_plan(plan, readings, rating, next_earnings)
         if not problems:
             return PlanOutcome(plan, None, attempt)
         shown = "; ".join(problems)

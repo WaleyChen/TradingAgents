@@ -112,6 +112,12 @@ def _context_values(context: Context) -> list[Known]:
             found.append(Known(name.removesuffix("_pct").replace("_", " "), kind, float(value), "context"))
     if context.price is not None:
         found.append(Known("price close", "usd", context.price.close, "context"))
+    if context.events is not None:
+        for r in context.events.recent_earnings:
+            for name, label in (("eps_actual", "reported eps"), ("eps_estimate", "estimated eps"),
+                                ("revenue_actual", "reported revenue"), ("revenue_estimate", "estimated revenue")):
+                if getattr(r, name) is not None:
+                    found.append(Known(label, "usd", float(getattr(r, name)), "context"))
     return found
 
 

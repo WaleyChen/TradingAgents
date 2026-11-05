@@ -109,11 +109,40 @@ class Price(_Company):
     close: float = Field(gt=0, lt=1e7)
 
 
+class NextEarnings(_Strict):
+    date: date
+    fiscal_period: Label
+    confirmed: bool
+
+
+class EarningsReport(_Strict):
+    """One reported quarter. Estimates may be null: not every feed has them."""
+
+    fiscal_period: Label
+    period_end: date
+    reported_on: date
+    eps_actual: PerShare
+    eps_estimate: PerShare
+    revenue_actual: Amount
+    revenue_estimate: Amount
+
+
+class Events(_Company):
+    """When the company reports next and what it last reported."""
+
+    currency: Literal["USD"]
+    source: Source
+    as_of: date
+    next_earnings: NextEarnings | None = None
+    recent_earnings: list[EarningsReport] = Field(default_factory=list, max_length=4)
+
+
 class Context(_Strict):
     """What a caller supplies with a request. Only the blocks defined here are accepted."""
 
     schema_version: Literal[1] = 1
     financials: Financials | None = None
     price: Price | None = None
+    events: Events | None = None
     notes: str | None = Field(default=None, max_length=MAX_NOTES,
                               description="Free text. Unverified: context only, never a source for a figure.")

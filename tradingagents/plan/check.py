@@ -19,7 +19,9 @@ Scope and meaning, so a plan's reader and its checker agree:
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, fields
+from datetime import date
 
 from tradingagents.plan.models import Leaf, Plan, Trigger
 
@@ -255,13 +257,29 @@ def _check_target(plan: Plan, readings: Readings, rating: str | None) -> list[st
     return found
 
 
-def _check_watch(plan: Plan) -> list[str]:
-    return [f"watch item {i + 1} is dated {w.when}, not after the plan date {plan.as_of_date}"
-            for i, w in enumerate(plan.watch) if w.when is not None and w.when <= plan.as_of_date]
+_EARNINGS = re.compile(r"\b(?:earnings|print|quarterly (?:report|results)|next (?:report|results))\b",
+                       re.IGNORECASE)
 
 
-def check_plan(plan: Plan, readings: Readings, rating: str | None = None) -> list[str]:
+def _check_watch(plan: Plan, next_earnings: date | None) -> list[str]:
+    """Dates come after the plan date, and an earnings date is the supplied one or none."""
+    found = []
+    for i, w in enumerate(plan.watch, 1):
+        if w.when is not None and w.when <= plan.as_of_date:
+            found.append(f"watch item {i} is dated {w.when}, not after the plan date {plan.as_of_date}")
+        if w.when is not None and _EARNINGS.search(w.what):
+            if next_earnings is None:
+                found.append(f"watch item {i} is about earnings and is dated {w.when}, but no earnings date "
+                             "was supplied: leave the date out")
+            elif w.when != next_earnings:
+                found.append(f"watch item {i} is about earnings and is dated {w.when}, but the next "
+                             f"earnings date is {next_earnings}")
+    return found
+
+
+def check_plan(plan: Plan, readings: Readings, rating: str | None = None,
+               next_earnings: date | None = None) -> list[str]:
     """Every contradiction in the plan; an empty list means it may be shown."""
     return [*_check_price(plan, readings), *_check_entries(plan), *_check_exits(plan),
             *_check_scenarios(plan), *_check_triggers(plan, readings), *_check_rating(plan, rating),
-            *_check_target(plan, readings, rating), *_check_watch(plan)]
+            *_check_target(plan, readings, rating), *_check_watch(plan, next_earnings)]

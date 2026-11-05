@@ -166,6 +166,149 @@
       "title": "CashFlow",
       "type": "object"
     },
+    "EarningsReport": {
+      "additionalProperties": false,
+      "description": "One reported quarter. Estimates may be null: not every feed has them.",
+      "properties": {
+        "eps_actual": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000.0,
+              "exclusiveMinimum": -1000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eps Actual"
+        },
+        "eps_estimate": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000.0,
+              "exclusiveMinimum": -1000000.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Eps Estimate"
+        },
+        "fiscal_period": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Fiscal Period",
+          "type": "string"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "reported_on": {
+          "format": "date",
+          "title": "Reported On",
+          "type": "string"
+        },
+        "revenue_actual": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revenue Actual"
+        },
+        "revenue_estimate": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revenue Estimate"
+        }
+      },
+      "required": [
+        "fiscal_period",
+        "period_end",
+        "reported_on"
+      ],
+      "title": "EarningsReport",
+      "type": "object"
+    },
+    "Events": {
+      "additionalProperties": false,
+      "description": "When the company reports next and what it last reported.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "next_earnings": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/NextEarnings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "recent_earnings": {
+          "items": {
+            "$ref": "#/$defs/EarningsReport"
+          },
+          "maxItems": 4,
+          "title": "Recent Earnings",
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "source",
+        "as_of"
+      ],
+      "title": "Events",
+      "type": "object"
+    },
     "Financials": {
       "additionalProperties": false,
       "properties": {
@@ -322,6 +465,33 @@
       "title": "Income",
       "type": "object"
     },
+    "NextEarnings": {
+      "additionalProperties": false,
+      "properties": {
+        "confirmed": {
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "date": {
+          "format": "date",
+          "title": "Date",
+          "type": "string"
+        },
+        "fiscal_period": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Fiscal Period",
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "fiscal_period",
+        "confirmed"
+      ],
+      "title": "NextEarnings",
+      "type": "object"
+    },
     "Price": {
       "additionalProperties": false,
       "description": "A verified closing price, so the service can derive valuation ratios.",
@@ -463,6 +633,17 @@
   "additionalProperties": false,
   "description": "What a caller supplies with a request. Only the blocks defined here are accepted.",
   "properties": {
+    "events": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Events"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "financials": {
       "anyOf": [
         {

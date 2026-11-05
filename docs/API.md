@@ -118,6 +118,15 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   },
   "price": { "ticker": "MU", "currency": "USD", "source": "getmarketalerts",
              "as_of": "2026-11-04", "close": 795.23 },
+  "events": {
+    "ticker": "MU", "currency": "USD", "as_of": "2026-11-05", "source": "financial_datasets",
+    "next_earnings": { "date": "2026-12-17", "fiscal_period": "Q1 FY2027", "confirmed": false },
+    "recent_earnings": [{
+      "fiscal_period": "Q4 FY2026", "period_end": "2026-09-03", "reported_on": "2026-10-09",
+      "eps_actual": 12.5, "eps_estimate": null,
+      "revenue_actual": 54229000000, "revenue_estimate": null
+    }]
+  },
   "notes": "Optional free text. Unverified: context only, never a source for a figure."
 }
 ```
@@ -143,6 +152,11 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 - At most 10 annual, 16 quarterly and 26 balance rows. One balance sheet per date;
   where it falls on a statement's `period_end`, it must carry the same
   `fiscal_period` label as one of the statements ending that day.
+- `events` gives the next earnings date and up to four recent reports (estimates may be
+  `null`). When it is sent, a `plan.watch` item about earnings (one that mentions earnings,
+  a print, or the next quarterly report or results) may carry only `next_earnings.date` or
+  no date. With no `events`, or a null `next_earnings`, such an item may carry no date at
+  all, so a model cannot invent one. This applies to every request, with or without `context`.
 - `notes` is shown to the agents as unverified context, with a length limit.
 
 **Checks.** A request is refused, before any model call, if:
@@ -164,6 +178,8 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 | `fcf_mismatch` | free cash flow differs from operating cash flow less capex (either sign for capex) |
 | `income_order` | gross profit, operating income or net income exceed what they should |
 | `zero_placeholder` | a value that looks like a missing value was sent as `0` |
+| `earnings_date_passed` | `events.next_earnings.date` is not after the block's `as_of` |
+| `reported_before_period_end` / `reported_after_as_of` | a recent report is dated before its period ended, or after `as_of` |
 | `price_date` | the price is after the run date or more than 7 days before it |
 
 A passing request is internally consistent. That does not make it true: the checks
@@ -287,7 +303,7 @@ or is retried.
     "if_you_own": "Hold; add only on the entry levels above.",
     "if_you_dont": "Start small now and build on the entry levels.",
     "watch": [
-      { "what": "Next quarterly report: growth and capex", "when": "2026-12-10", "effect": "supports" }
+      { "what": "Gross margin holds above 75% in the next filing", "when": "2026-12-10", "effect": "supports" }
     ],
     "confidence": "medium",
     "confidence_reason": "Strong fundamentals, but capex return is unproven."
