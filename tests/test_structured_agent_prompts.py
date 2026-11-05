@@ -193,3 +193,11 @@ def test_the_other_analysts_must_source_and_date_their_numbers():
     import tradingagents.agents.analysts.news_analyst as news
     for module in (market, news, fundamentals):
         assert "SOURCED_NUMBERS" in inspect.getsource(module)
+
+
+@pytest.mark.unit
+def test_the_portfolio_managers_target_may_not_be_a_technical_level():
+    from tradingagents.agents.schemas import PortfolioDecision
+
+    description = PortfolioDecision.model_fields["price_target"].description
+    assert "never a moving average or support level" in description

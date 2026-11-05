@@ -34,10 +34,17 @@ GOOD = {
          "trigger": {"indicator": "close_vs_sma_200", "when": "weekly_close_below"}},
     ],
     "scenarios": [
-        {"name": "bull", "price": 330, "probability": 0.25},
-        {"name": "base", "price": 300, "probability": 0.5},
-        {"name": "bear", "price": 210, "probability": 0.25},
+        {"name": "bull", "price": 330, "probability": 0.25,
+         "driver": "Capex pays back faster than feared", "basis": "Judgment: needs two clean quarters."},
+        {"name": "base", "price": 300, "probability": 0.5,
+         "driver": "Growth holds, margins stay near today's level", "basis": "Judgment: the current run-rate."},
+        {"name": "bear", "price": 210, "probability": 0.25,
+         "driver": "Demand slows while spending continues", "basis": "Judgment: a repeat of the last downturn."},
     ],
+    "target": {"price": 300.0, "method": "base_scenario", "basis": "Base-case value in 6 months."},
+    "if_you_own": "Hold; add only on the entry levels below.",
+    "if_you_dont": "Start small now and build on the entry levels.",
+    "watch": [{"what": "Next quarterly report: growth and capex", "when": "2026-12-10", "effect": "supports"}],
     "confidence": "medium",
     "confidence_reason": "Strong fundamentals, but capex return is unproven.",
 }
@@ -160,7 +167,8 @@ def test_the_iren_contradiction_is_caught():
         {"kind": "stop", "portfolio_pct": 0.0, "reason": "stop",
          "trigger": {"price": {"when": "at_or_below", "value": 28.5}}},
     ]
-    data["scenarios"] = [{"name": "base", "price": 33.62, "probability": 1.0}]
+    data["scenarios"] = [{"name": "base", "price": 33.62, "probability": 1.0, "driver": "d", "basis": "b"}]
+    data["target"] = {"price": 33.62, "method": "base_scenario", "basis": "b"}
     found = " ".join(problems(data, Readings(price=24.0), rating="Underweight"))
     assert "stop" in found and "base" in found
 
@@ -240,6 +248,7 @@ def test_a_bearish_plan_can_buy_lower_and_stop_out_to_zero():
     data = plan_with()
     data["now"] = {"portfolio_pct": 0.0, "summary": "Stay out."}
     data["exits"] = [data["exits"][1]]
+    data["target"] = {"price": 220.0, "method": "valuation", "basis": "Earnings fall back to the cycle average."}
     assert problems(data, rating="Sell") == []
 
 
@@ -263,15 +272,16 @@ def test_the_rating_and_the_recommended_size_agree(rating, now, ok):
     data["entries"] = [] if rating == "Sell" else data["entries"]
     if now == 1.0:
         data["exits"] = []
-    got = [p for p in problems(data, rating=rating) if "rating" in p]
+    got = [p for p in problems(data, rating=rating) if "recommended size" in p]
     assert (got == []) is ok
 
 
 @pytest.mark.unit
 def test_two_base_scenarios_are_an_error():
     data = plan_with()
-    data["scenarios"] = [{"name": "base", "price": 300, "probability": 0.5},
-                         {"name": "Base", "price": 280, "probability": 0.5}]
+    why = {"driver": "d", "basis": "b"}
+    data["scenarios"] = [{"name": "base", "price": 300, "probability": 0.5, **why},
+                         {"name": "Base", "price": 280, "probability": 0.5, **why}]
     assert any("base" in p and "once" in p for p in problems(data))
 
 
@@ -366,5 +376,74 @@ def test_free_text_is_bounded(field, value):
 def test_a_price_beyond_any_real_quote_is_rejected():
     data = plan_with()
     data["scenarios"][2]["price"] = 1e30
+    with pytest.raises(ValidationError):
+        Plan.model_validate(data)
+
+
+def _target(**changes):
+    data = copy.deepcopy(GOOD)
+    data["target"] = {**data["target"], **changes}
+    return data
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("rating, price, ok", [
+    ("Overweight", 300.0, True), ("Overweight", 200.0, False),
+    ("Buy", 200.0, False), ("Sell", 300.0, False), ("Underweight", 300.0, False),
+    ("Hold", 300.0, True), ("Hold", 200.0, True),
+])
+def test_the_target_points_the_way_the_rating_does(rating, price, ok):
+    data = _target(price=price, method="valuation")
+    found = [p for p in problems(data, rating=rating) if "target" in p and "rating" in p]
+    assert (found == []) is ok
+
+
+@pytest.mark.unit
+def test_a_target_taken_from_the_base_case_must_be_the_base_case():
+    assert any("base scenario" in p for p in problems(_target(price=320.0)))
+    assert problems(_target(price=300.5)) == []                 # within rounding
+
+
+@pytest.mark.unit
+def test_a_moving_average_is_not_a_fair_value():
+    found = problems(_target(price=240.5, method="valuation"))
+    assert any("200-day average" in p and "technical_reference" in p for p in found)
+    assert not any("average" in p for p in problems(_target(price=240.5, method="technical_reference")))
+    assert not any("average" in p for p in problems(_target(price=262.0, method="valuation")))
+
+
+@pytest.mark.unit
+def test_a_watch_date_must_be_after_the_plan_date():
+    data = copy.deepcopy(GOOD)
+    data["watch"][0]["when"] = "2026-11-02"
+    assert any("watch" in p for p in problems(data))
+    data["watch"][0]["when"] = None
+    assert problems(data) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("remove", ["target", "if_you_own", "if_you_dont", "watch"])
+def test_the_decision_fields_are_required(remove):
+    data = copy.deepcopy(GOOD)
+    del data[remove]
+    with pytest.raises(ValidationError):
+        Plan.model_validate(data)
+
+
+@pytest.mark.unit
+def test_every_scenario_states_its_driver_and_why_that_probability():
+    for field in ("driver", "basis"):
+        data = copy.deepcopy(GOOD)
+        del data["scenarios"][0][field]
+        with pytest.raises(ValidationError):
+            Plan.model_validate(data)
+
+
+@pytest.mark.unit
+def test_the_target_method_comes_from_a_closed_list_and_watch_needs_at_least_one_item():
+    with pytest.raises(ValidationError):
+        Plan.model_validate(_target(method="gut feeling"))
+    data = copy.deepcopy(GOOD)
+    data["watch"] = []
     with pytest.raises(ValidationError):
         Plan.model_validate(data)

@@ -34,6 +34,10 @@ def _trigger(trigger: Trigger) -> str:
     return _leaf(trigger)
 
 
+_METHODS = {"base_scenario": "base scenario", "valuation": "valuation",
+            "technical_reference": "technical reference, not a fair value"}
+
+
 def render_plan(plan: Plan | dict) -> str:
     """Markdown for a plan, or for the plain dict the graph state carries."""
     p = plan if isinstance(plan, Plan) else Plan.model_validate(plan)
@@ -41,15 +45,24 @@ def render_plan(plan: Plan | dict) -> str:
         f"As of {p.as_of_date} at ${p.as_of_price:,.2f}; horizon {_line(p.horizon)}. "
         f"Sizes are the total position as a share of the portfolio after the trigger fires.",
         "",
-        f"**Now: {p.now.portfolio_pct:g}%.** {_line(p.now.summary)}",
-        "",
+        f"**Target: ${p.target.price:,.2f} ({_METHODS[p.target.method]}).** {_line(p.target.basis)}",
     ]
+    if p.expected_return_pct is not None:
+        lines += ["", f"**Expected return: {p.expected_return_pct:+.1f}%**, computed from the scenarios below "
+                      f"and the price above."]
+    lines += ["", f"**Now: {p.now.portfolio_pct:g}%.** {_line(p.now.summary)}", "",
+              f"**If you own it:** {_line(p.if_you_own)}", "",
+              f"**If you don't:** {_line(p.if_you_dont)}", ""]
     if p.entries:
         lines += ["**Entries**", *(f"- {e.portfolio_pct:g}% when {_trigger(e.trigger)}: {_line(e.reason)}"
                                    for e in p.entries), ""]
     if p.exits:
         lines += ["**Exits**", *(f"- {x.kind.replace('_', ' ')} to {x.portfolio_pct:g}% when "
                                   f"{_trigger(x.trigger)}: {_line(x.reason)}" for x in p.exits), ""]
-    lines += ["**Scenarios**", *(f"- {_line(s.name)}: ${s.price:,.2f}, {s.probability:.0%}" for s in p.scenarios), "",
+    lines += ["**Scenarios**",
+              *(f"- {_line(s.name)}: ${s.price:,.2f}, {s.probability:.0%}: {_line(s.driver)} ({_line(s.basis)})"
+                for s in p.scenarios), "",
+              "**Watch**", *(f"- {w.effect}: {_line(w.what)}" + (f" (by {w.when})" if w.when else "")
+                             for w in p.watch), "",
               f"**Confidence: {p.confidence}.** {_line(p.confidence_reason)}"]
     return "\n".join(lines)

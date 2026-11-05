@@ -47,3 +47,45 @@ def test_a_free_text_field_cannot_add_structure_to_the_report():
     data["entries"][0]["reason"] = "dip\n\n# Injected heading\n- fake entry"
     text = render_plan(data)
     assert "\n# Injected" not in text and "\n- fake entry" not in text
+
+
+@pytest.mark.unit
+def test_the_decision_fields_are_shown_with_their_method_and_basis():
+    import copy
+
+    data = copy.deepcopy(GOOD)
+    data["expected_return_pct"] = 15.3
+    text = render_plan(data)
+    assert "Target: $300.00" in text and "base scenario" in text and "Base-case value in 6 months." in text
+    assert "Expected return: +15.3%" in text and "computed from the scenarios" in text
+    assert "**If you own it:** Hold; add only on the entry levels below." in text
+    assert "**If you don't:** Start small now and build on the entry levels." in text
+    assert "- bull: $330.00, 25%: Capex pays back faster than feared (Judgment: needs two clean quarters.)" in text
+    assert "- supports: Next quarterly report: growth and capex (by 2026-12-10)" in text
+
+
+@pytest.mark.unit
+def test_a_negative_expected_return_and_an_undated_watch_item_read_correctly():
+    import copy
+
+    data = copy.deepcopy(GOOD)
+    data["expected_return_pct"] = -4.2
+    data["watch"][0]["when"] = None
+    data["watch"][0]["effect"] = "weakens"
+    text = render_plan(data)
+    assert "Expected return: -4.2%" in text
+    assert "- weakens: Next quarterly report: growth and capex" in text and "(by" not in text
+
+
+@pytest.mark.unit
+def test_the_new_free_text_fields_cannot_add_structure_either():
+    import copy
+
+    data = copy.deepcopy(GOOD)
+    data["if_you_own"] = "hold\n\n# Injected"
+    data["watch"][0]["what"] = "x\n- fake"
+    data["scenarios"][0]["driver"] = "y\n## Injected two"
+    data["target"]["basis"] = "z\n- fake target"
+    text = render_plan(data)
+    for injected in ("\n# Injected", "\n- fake", "\n## Injected two"):
+        assert injected not in text

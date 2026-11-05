@@ -151,3 +151,11 @@ def test_the_html_report_numbers_the_appendix_sections_too(tmp_path):
     state = {**STATE, "report_summary": "THE-SUMMARY"}
     write_report_tree(state, "ACME", tmp_path, html=True)
     assert "THE-SUMMARY" in (tmp_path / "complete_report.html").read_text()
+
+
+@pytest.mark.unit
+def test_the_summary_takes_its_target_from_the_plan_only():
+    llm = ScriptedLLM(_words(500))
+    create_summary_node(llm)(STATE)
+    prompt = llm.prompts[0]
+    assert "the position plan's target" in prompt and "never call a moving average" in prompt

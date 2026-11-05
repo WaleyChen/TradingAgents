@@ -242,9 +242,19 @@ or is retried.
         "trigger": { "indicator": "close_vs_sma_200", "when": "weekly_close_below" } }
     ],
     "scenarios": [
-      { "name": "bull", "price": 330, "probability": 0.25 },
-      { "name": "base", "price": 300, "probability": 0.5 },
-      { "name": "bear", "price": 210, "probability": 0.25 }
+      { "name": "bull", "price": 330, "probability": 0.25,
+        "driver": "Capex pays back faster than feared", "basis": "Judgment: needs two clean quarters." },
+      { "name": "base", "price": 300, "probability": 0.5,
+        "driver": "Growth holds, margins stay near today's level", "basis": "Judgment: the current run-rate." },
+      { "name": "bear", "price": 210, "probability": 0.25,
+        "driver": "Demand slows while spending continues", "basis": "Judgment: a repeat of the last downturn." }
+    ],
+    "expected_return_pct": 15.3,
+    "target": { "price": 300.0, "method": "base_scenario", "basis": "Base-case value in 6 months." },
+    "if_you_own": "Hold; add only on the entry levels above.",
+    "if_you_dont": "Start small now and build on the entry levels.",
+    "watch": [
+      { "what": "Next quarterly report: growth and capex", "when": "2026-12-10", "effect": "supports" }
     ],
     "confidence": "medium",
     "confidence_reason": "Strong fundamentals, but capex return is unproven."
@@ -257,6 +267,22 @@ or is retried.
 the customer's holdings. `portfolio_pct` is the total position as a share of an
 equity portfolio after the trigger fires (not an increment), between 0 and 10.
 `now` is the recommended size today.
+
+**The decision fields.**
+
+- `target` is the one price the plan stands behind. `method` is `base_scenario` (the
+  price equals the base scenario), `valuation` (the `basis` names the earnings or cash
+  flow and the multiple behind it) or `technical_reference` (a level being watched,
+  explicitly not a fair value). A moving average cannot be a `valuation` or
+  `base_scenario` target.
+- `expected_return_pct` is computed by the service from the scenarios against the
+  verified price, in percent. It is not model output.
+- Each scenario has a `driver` (what would have to happen) and a `basis` for its
+  probability, which says so when it is a judgment.
+- `if_you_own` and `if_you_dont` give one action each, so a trim is never read as a short.
+- `watch` lists one to five measurable things that would change the view: `effect` is
+  `supports` or `weakens` the plan's view, and `when` is a date after the plan date when
+  it has one.
 
 **Triggers** come from a closed list; nothing else is accepted. A trigger is one
 condition, or `all_of` / `any_of` with exactly two (no nesting).
@@ -285,6 +311,10 @@ At most 5 entries and 5 exits. `exits[].kind` is `take_profit` or `stop`.
 - `as_of_price` matches the verified price, and no trigger is already true at
   the verified readings (an RSI-below-30 entry is fine at RSI 39, not at 22).
 - A trigger on an indicator reading that is unavailable is an error.
+- A Buy or Overweight target is above `as_of_price`; a Sell or Underweight target is
+  below it. A `base_scenario` target equals the base scenario price. A target within
+  0.5% of the 20, 50 or 200-day average is rejected unless its method is
+  `technical_reference`. Watch dates are after `as_of_date`.
 - The plan agrees with the rating: Sell means `now` is 0; Buy and Overweight
   mean `now` is above 0.
 

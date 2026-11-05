@@ -151,3 +151,19 @@ def test_readings_that_are_unavailable_add_nothing_to_the_already_true_list():
 
     text = _prompt("decision", "Hold", Readings(price=10.0), [])
     assert "sma_" not in text.split("Already true now")[1].split("Final decision")[0]
+
+
+@pytest.mark.unit
+def test_the_expected_return_is_computed_from_the_scenarios_not_taken_from_the_model():
+    # 0.25 * 330 + 0.5 * 300 + 0.25 * 210 = 285 against a verified price of 247.19
+    out = _run(FakeLLM(_plan(expected_return_pct=99.0)))
+    assert out.plan.expected_return_pct == pytest.approx(15.30, abs=0.011)
+
+
+@pytest.mark.unit
+def test_the_prompt_states_the_target_and_scenario_rules():
+    llm = FakeLLM(_plan())
+    _run(llm)
+    prompt = llm.prompts[0]
+    for expected in ("base_scenario", "technical_reference", "moving average", "if_you_own", "probability"):
+        assert expected in prompt

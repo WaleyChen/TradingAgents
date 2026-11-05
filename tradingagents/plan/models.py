@@ -132,6 +132,25 @@ class Scenario(_Strict):
     name: str = Field(min_length=1, max_length=MAX_LABEL)
     price: float = Field(gt=0, lt=MAX_PRICE)
     probability: float = Field(ge=0, le=1)
+    driver: str = Field(min_length=1, max_length=MAX_TEXT, description="What would have to happen.")
+    basis: str = Field(min_length=1, max_length=MAX_TEXT,
+                       description="Why this probability: a judgment, say so, or the evidence.")
+
+
+class Target(_Strict):
+    """A price the plan stands behind, and where it comes from."""
+
+    price: float = Field(gt=0, lt=MAX_PRICE)
+    method: Literal["base_scenario", "valuation", "technical_reference"]
+    basis: str = Field(min_length=1, max_length=MAX_TEXT)
+
+
+class Watch(_Strict):
+    """Something measurable that would change the view, with a date when it has one."""
+
+    what: str = Field(min_length=1, max_length=MAX_TEXT)
+    when: date | None = None
+    effect: Literal["supports", "weakens"]
 
 
 class Plan(_Strict):
@@ -142,5 +161,11 @@ class Plan(_Strict):
     entries: list[Entry] = Field(default_factory=list, max_length=MAX_LEGS)
     exits: list[Exit] = Field(default_factory=list, max_length=MAX_LEGS)
     scenarios: list[Scenario] = Field(min_length=1, max_length=5)
+    expected_return_pct: float | None = Field(
+        default=None, description="Computed by the service from the scenarios; leave it null.")
+    target: Target
+    if_you_own: str = Field(min_length=1, max_length=MAX_TEXT)
+    if_you_dont: str = Field(min_length=1, max_length=MAX_TEXT)
+    watch: list[Watch] = Field(min_length=1, max_length=MAX_LEGS)
     confidence: Literal["low", "medium", "high"]
     confidence_reason: str = Field(min_length=1, max_length=MAX_TEXT)

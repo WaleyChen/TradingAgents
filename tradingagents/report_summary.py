@@ -61,6 +61,10 @@ decided it, each with its figures; the main risks and what would change the view
 the entry and exit levels from the position plan, if there is one. Keep to what the
 material below supports.
 
+If there is a position plan, give the position plan's target and expected return and
+no other price target, even if another section states one; never call a moving average
+or a support level a target or a fair value.
+
 {ONE_VOICE} {SOURCED_NUMBERS} {NO_HANDLES}
 {NO_EXTERNAL_TOOLS}
 

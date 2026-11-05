@@ -230,7 +230,38 @@ def _check_rating(plan: Plan, rating: str | None) -> list[str]:
     return []
 
 
+_AVERAGE_TOLERANCE = 0.005     # a target within 0.5% of an average is that average
+_BASE_TOLERANCE = 0.005
+_BULLISH, _BEARISH = ("Buy", "Overweight"), ("Sell", "Underweight")
+
+
+def _check_target(plan: Plan, readings: Readings, rating: str | None) -> list[str]:
+    """The target needs a method, and a moving average is not one."""
+    target, found = plan.target, []
+    if rating in _BULLISH and target.price <= plan.as_of_price:
+        found.append(f"rating {rating} requires a target above the price {plan.as_of_price}")
+    if rating in _BEARISH and target.price >= plan.as_of_price:
+        found.append(f"rating {rating} requires a target below the price {plan.as_of_price}")
+    bases = [s.price for s in plan.scenarios if s.name.strip().lower() == "base"]
+    if target.method == "base_scenario" and bases \
+            and abs(target.price - bases[0]) > _BASE_TOLERANCE * bases[0]:
+        found.append(f"target {target.price} is not the base scenario price {bases[0]}, "
+                     "but its method is base_scenario")
+    if target.method != "technical_reference":
+        for days, average in (("20", readings.sma_20), ("50", readings.sma_50), ("200", readings.sma_200)):
+            if average is not None and abs(target.price - average) <= _AVERAGE_TOLERANCE * average:
+                found.append(f"target {target.price} is the {days}-day average, a technical reference and "
+                             "not a fair value: set its method to technical_reference or give a valuation")
+    return found
+
+
+def _check_watch(plan: Plan) -> list[str]:
+    return [f"watch item {i + 1} is dated {w.when}, not after the plan date {plan.as_of_date}"
+            for i, w in enumerate(plan.watch) if w.when is not None and w.when <= plan.as_of_date]
+
+
 def check_plan(plan: Plan, readings: Readings, rating: str | None = None) -> list[str]:
     """Every contradiction in the plan; an empty list means it may be shown."""
     return [*_check_price(plan, readings), *_check_entries(plan), *_check_exits(plan),
-            *_check_scenarios(plan), *_check_triggers(plan, readings), *_check_rating(plan, rating)]
+            *_check_scenarios(plan), *_check_triggers(plan, readings), *_check_rating(plan, rating),
+            *_check_target(plan, readings, rating), *_check_watch(plan)]

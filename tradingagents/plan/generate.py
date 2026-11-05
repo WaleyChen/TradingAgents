@@ -45,6 +45,17 @@ Rules the plan must satisfy:
    buy levels below the price, a small or zero `now`, and a stop below the
    lowest of those levels. Never put a stop above an entry. A price target
    below the current price becomes the base scenario or an entry level, not a stop.
+7. `target` is the one price the plan stands behind. Its method is base_scenario
+   (the price equals the base scenario) or valuation (its basis names the earnings
+   or cash flow and the multiple behind it). A moving average or a support level is
+   never a fair value: use technical_reference only for a level you are watching.
+   A Buy or Overweight target is above the current price; Sell or Underweight, below.
+8. Every scenario says what would have to happen (`driver`) and why that probability
+   (`basis`): call a probability a judgment when it is one. Leave expected_return_pct
+   null; the service computes it.
+9. `if_you_own` and `if_you_dont` are one sentence each, so a trim is never mistaken for a short.
+10. `watch` lists one to five measurable things that would change the view, each
+    supporting or weakening it, with a date after today when it has one.
 
 Triggers come from this closed list; write nothing else:
 - {{"price": {{"when": "at_or_below" | "at_or_above", "value": N}}}}
@@ -102,9 +113,16 @@ def _prompt(decision: str, rating: str, readings: Readings, problems: list[str])
             f"{NO_EXTERNAL_TOOLS}{get_language_instruction()}")
 
 
+def _expected_return(plan: Plan, price: float) -> float | None:
+    """Probability-weighted scenario price against the verified price, in percent; the model does not do this sum."""
+    if abs(sum(s.probability for s in plan.scenarios) - 1) > 0.01:
+        return None
+    return round((sum(s.probability * s.price for s in plan.scenarios) / price - 1) * 100, 2)
+
+
 def _anchor(plan: Plan, readings: Readings) -> Plan:
     """The price and date are facts the readings own, not the model's to restate."""
-    update = {"as_of_price": readings.price}
+    update = {"as_of_price": readings.price, "expected_return_pct": _expected_return(plan, readings.price)}
     if readings.date:
         update["as_of_date"] = readings.date
     return Plan.model_validate({**plan.model_dump(mode="json"), **update})
