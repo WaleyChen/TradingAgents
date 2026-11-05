@@ -197,6 +197,25 @@ and new enum values are additive and keep the version. `/health` lists the versi
 service reads in `context_schema_versions`. The schema file is generated from the same
 models that validate requests, and a test fails if it is stale.
 
+### Rating in plain words
+
+`decision` is the internal rating (`Buy`, `Overweight`, `Hold`, `Underweight`, `Sell`) and
+does not change. For retail readers the job also carries `rating_label` and
+`rating_meaning`, from a fixed table in code (never written by the model):
+
+| `decision` | `rating_label` | `rating_meaning` |
+|---|---|---|
+| `Buy` | Strong Buy | Open a position or add to the one you have. |
+| `Overweight` | Weak Buy | Build a position gradually, in stages, rather than all at once. |
+| `Hold` | Hold | Keep what you have. Don't add and don't sell. |
+| `Underweight` | Weak Sell | If you own it, sell some of it. If you don't, don't buy it yet. |
+| `Sell` | Strong Sell | If you own it, sell it. If you don't, stay away. |
+
+Both are `null` when `decision` is `REVIEW` or anything else. Show the label, not
+`decision`. The summary and the plan are written in the same plain terms, about "your
+account" and "your position", and never use "overweight", "underweight", "standard
+weight" or "model portfolio".
+
 ### Summary
 
 A completed job also carries `summary`: about 600 words (never more than 700) in
@@ -211,6 +230,20 @@ retries, `summary` is `null`; the reports are still valid. Set
 the internal debate, written for the record rather than the customer. They still
 name internal roles ("bull", "aggressive analyst"), so show `summary`, not them.
 Treat the text as untrusted model output and escape it when you show it.
+
+**Checked figures.** The summary declares every dollar amount, percentage and multiple
+it states. `summary_figures` lists them, each with `label`, `value`, `unit` (`usd`,
+`usd_millions`, `usd_billions`, `pct`, `x`, `number`), `source` (`context`, `readings`,
+`plan`, `analyst_report`, `derived`) and `period`, plus `verified`. `verified` is true only
+when the figure was checked in code against your supplied `context`, the service's own
+market readings or the position plan (within 1%, for rounding). Figures from the analyst
+reports or the model's own calculations are never marked verified. If a figure still fails
+after the model's retries, the summary is returned anyway and `summary_problems` lists
+`{code, subject, message}` for each: `figure_not_in_source` (a figure claimed from verified
+data is not in it) or `undeclared_figure` (a dollar, percent or multiple appears in the text
+but not in the list). Hide the summary or show a warning when `summary_problems` is
+non-empty. Both fields are `null` when the provider could not return structured output.
+This cannot see a bare number with no `$`, `%` or `x`, or a wrong figure within 1% of a real one.
 
 ### Position plan
 

@@ -27,6 +27,9 @@ FAILED = "plan generation failed"
 _RULES = f"""\
 Turn the decision into a position plan for a long-only model equity portfolio.
 
+Write for retail traders in plain words: a percentage is a share of the reader's own
+account, so say "your account", never "model portfolio" or "standard weight".
+
 Percentages are the TOTAL position size, as a share of the portfolio, after the
 trigger fires (not increments). Each is between 0 and {MAX_PCT:g}. `now` is the
 size to hold today. Use at most {MAX_LEGS} entries and {MAX_LEGS} exits.

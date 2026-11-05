@@ -43,7 +43,7 @@ def render_plan(plan: Plan | dict) -> str:
     p = plan if isinstance(plan, Plan) else Plan.model_validate(plan)
     lines = [
         f"As of {p.as_of_date} at ${p.as_of_price:,.2f}; horizon {_line(p.horizon)}. "
-        f"Sizes are the total position as a share of the portfolio after the trigger fires.",
+        f"Sizes are the total position as a share of your account after the trigger fires.",
         "",
         f"**Target: ${p.target.price:,.2f} ({_METHODS[p.target.method]}).** {_line(p.target.basis)}",
     ]
