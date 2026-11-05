@@ -108,7 +108,7 @@ class GraphSetup:
 
     def setup_graph(
         self, selected_analysts=("market", "social", "news", "fundamentals"), memory_node=None,
-        plan_node=None, summary_node=None,
+        plan_node=None, summary_node=None, context=None,
     ):
         """Set up and compile the agent workflow graph.
 
@@ -123,14 +123,16 @@ class GraphSetup:
             plan_node: Node that turns the final decision into a checked
                 position plan. It runs after the Portfolio Manager.
             summary_node: Node that writes the report summary. It runs last.
+            context: The caller's verified data. An analyst is not offered tools that fetch a copy of
+                a fact it already covers (see ``tool_policy``).
         """
-        plan = build_analyst_execution_plan(selected_analysts)
+        plan = build_analyst_execution_plan(selected_analysts, context)
 
         analyst_factories = {
-            "market": lambda: create_market_analyst(self.quick_thinking_llm),
-            "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
-            "news": lambda: create_news_analyst(self.quick_thinking_llm),
-            "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
+            "market": lambda tools: create_market_analyst(self.quick_thinking_llm, tools),
+            "social": lambda tools: create_sentiment_analyst(self.quick_thinking_llm),
+            "news": lambda tools: create_news_analyst(self.quick_thinking_llm, tools),
+            "fundamentals": lambda tools: create_fundamentals_analyst(self.quick_thinking_llm, tools),
         }
 
         bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
@@ -147,7 +149,7 @@ class GraphSetup:
 
         for spec in plan.specs:
             workflow.add_node(spec.agent_node,
-                              _analyst_graph(spec, analyst_factories[spec.key](), self.max_tool_rounds))
+                              _analyst_graph(spec, analyst_factories[spec.key](spec.tools), self.max_tool_rounds))
 
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)

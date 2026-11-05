@@ -21,19 +21,43 @@ TOOLS = (
 )
 
 
-def create_fundamentals_analyst(llm):
+def _listed(items: list[str]) -> str:
+    """'a', 'a and b' or 'a, b, and c'."""
+    return items[0] if len(items) == 1 else f"{items[0]} and {items[1]}" if len(items) == 2 \
+        else ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def fundamentals_system_message(tools) -> str:
+    """The analyst's brief, naming only the tools it has and pointing to supplied data for the rest."""
+    have = {tool.name for tool in tools}
+    statements = [f"`{n}`" for n in ("get_balance_sheet", "get_cashflow", "get_income_statement") if n in have]
+    offered = ([] if "get_fundamentals" not in have else ["`get_fundamentals` for comprehensive company analysis"]
+               + ([f"{_listed(statements)} for specific financial statements"] if statements else [])
+               + (["`get_insider_transactions` for recent insider buying and selling"]
+                  if "get_insider_transactions" in have else []))
+    notes = ""
+    if not statements:
+        notes += (" The company's financial statements, balance sheets and cash flows are in the supplied verified "
+                  "data above: use them, and do not look for other copies of those figures.")
+    if "get_insider_transactions" not in have:
+        notes += " Insider and fund activity is in the supplied verified data above."
+    return (
+        "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
+        + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
+        + (f" Use the available tools: {_listed(offered)}." if offered else "")
+        + notes
+        + " " + SOURCED_NUMBERS
+        + " " + UNEXPLAINED
+        + get_language_instruction()
+    )
+
+
+def create_fundamentals_analyst(llm, tools=TOOLS):
     def fundamentals_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = get_instrument_context_from_state(state, "fundamentals")
 
-        system_message = (
-            "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
-            + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
-            + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements, and `get_insider_transactions` for recent insider buying and selling."
-            + " " + SOURCED_NUMBERS
-            + " " + UNEXPLAINED
-            + get_language_instruction()
-        )
+        system_message = fundamentals_system_message(tools)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -53,11 +77,11 @@ def create_fundamentals_analyst(llm):
         )
 
         prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in TOOLS]))
+        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
-        result, report = take_turn(prompt, llm, TOOLS, state["messages"])
+        result, report = take_turn(prompt, llm, tools, state["messages"])
 
         return {
             "messages": [result],

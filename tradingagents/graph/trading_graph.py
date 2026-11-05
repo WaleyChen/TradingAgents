@@ -125,7 +125,7 @@ class TradingAgentsGraph:
         ) if self.config.get("report_summary") else None
         self.workflow = self.graph_setup.setup_graph(
             selected_analysts, memory_node=self._memory_step, plan_node=plan_node,
-            summary_node=summary_node,
+            summary_node=summary_node, context=supplied,
         )
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None

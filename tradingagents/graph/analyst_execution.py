@@ -1,7 +1,8 @@
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from tradingagents.agents.analysts import fundamentals_analyst, market_analyst, news_analyst
+from tradingagents.graph.tool_policy import tools_for
 
 
 @dataclass(frozen=True)
@@ -48,13 +49,14 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
 
 def build_analyst_execution_plan(
     selected_analysts: Iterable[str],
+    context=None,
 ) -> AnalystExecutionPlan:
     specs: list[AnalystNodeSpec] = []
     for analyst_key in selected_analysts:
         spec = ANALYST_NODE_SPECS.get(analyst_key)
         if spec is None:
             raise ValueError(f"unknown analyst key: {analyst_key}")
-        specs.append(spec)
+        specs.append(replace(spec, tools=tools_for(spec.key, spec.tools, context)))
 
     if not specs:
         raise ValueError("at least one analyst must be selected")

@@ -13,14 +13,19 @@ TOOLS = (
 )
 
 
-def create_market_analyst(llm):
+_FROM_SUPPLIED = """You are a technical analyst writing for retail traders. The technical levels supplied above in the verified data are the only indicator values you may use: they are the levels the customer's chart shows. Do not compute, restate or select other indicators, and do not explain which indicators you chose.
 
-    def market_analyst_node(state):
-        current_date = state["trade_date"]
-        instrument_context = get_instrument_context_from_state(state, "market")
+Use get_stock_data only to describe the recent price path: the recent high and low, large one-day or one-week moves, and volume. Never take an indicator value from it. Do not claim historical validation, support or resistance bounces, or exact percentage moves unless the tool output shows them with dates and prices.
 
-        system_message = (
-            """You are a trading assistant tasked with analyzing financial markets. Your role is to select the **most relevant indicators** for a given market condition or trading strategy from the following list. The goal is to choose up to **8 indicators** that provide complementary insights without redundancy. Categories and each category's indicators are:
+Write a short technical read of at most 350 words: the trend (the price against its 20, 50 and 200-day averages, using the distances given), momentum (RSI and MACD), volume against its average, where the price sits in its 52-week range, and the two or three levels that matter, each with the one-line reason it matters. If a level you would normally use was not supplied, say it was not supplied. Do not call a reading oversold or overbought unless the supplied data supports it (RSI under 30 or over 70). Finish with a short Markdown table of the key points."""
+
+
+def market_system_message(tools) -> str:
+    """The analyst's brief. With the callers' own indicator levels supplied it selects no indicators."""
+    if "get_indicators" not in {tool.name for tool in tools}:
+        return _FROM_SUPPLIED + " " + SOURCED_NUMBERS + get_language_instruction()
+    return (
+        """You are a trading assistant tasked with analyzing financial markets. Your role is to select the **most relevant indicators** for a given market condition or trading strategy from the following list. The goal is to choose up to **8 indicators** that provide complementary insights without redundancy. Categories and each category's indicators are:
 
 Moving Averages:
 - close_50_sma: 50 SMA: A medium-term trend indicator. Usage: Identify trend direction and serve as dynamic support/resistance. Tips: It lags price; combine with faster indicators for timely signals.
@@ -49,10 +54,19 @@ Volume-Based Indicators:
 Before writing the final report, call get_verified_market_snapshot for this ticker and the current date, and treat it as the source of truth for any exact OHLCV, price-level, or indicator-value claim. If another tool's output conflicts with the verified snapshot, flag the discrepancy rather than inventing a reconciled number. Do not claim historical validation, support/resistance bounces, or exact percentage moves unless they are directly supported by tool output with concrete dates and prices.
 
 Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
-            + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
-            + " " + SOURCED_NUMBERS
-            + get_language_instruction()
-        )
+        + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
+        + " " + SOURCED_NUMBERS
+        + get_language_instruction()
+    )
+
+
+def create_market_analyst(llm, tools=TOOLS):
+
+    def market_analyst_node(state):
+        current_date = state["trade_date"]
+        instrument_context = get_instrument_context_from_state(state, "market")
+
+        system_message = market_system_message(tools)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -72,11 +86,11 @@ Write a very detailed and nuanced report of the trends you observe. Provide spec
         )
 
         prompt = prompt.partial(system_message=system_message)
-        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in TOOLS]))
+        prompt = prompt.partial(tool_names=", ".join([tool.name for tool in tools]))
         prompt = prompt.partial(current_date=current_date)
         prompt = prompt.partial(instrument_context=instrument_context)
 
-        result, report = take_turn(prompt, llm, TOOLS, state["messages"])
+        result, report = take_turn(prompt, llm, tools, state["messages"])
 
         return {
             "messages": [result],
