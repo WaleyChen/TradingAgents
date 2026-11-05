@@ -120,6 +120,14 @@ class Progress(BaseModel):
         description="Seconds left, from the median stage times of recent finished jobs; null until there is history.")
 
 
+class QueueInfo(BaseModel):
+    position: int = Field(description="1 is next to start.")
+    jobs_ahead: int = Field(description="Jobs running or waiting in front of this one.")
+    starts_in_seconds: int | None = Field(
+        description="Seconds until it starts, from the typical job length of recent finished jobs; null until there is history.")
+    eta_seconds: int | None = Field(description="Seconds until it should finish, queue included; null until there is history.")
+
+
 class StageUsage(BaseModel):
     calls: int
     input_tokens: int
@@ -183,6 +191,8 @@ class AnalysisJobResponse(BaseModel):
         default=None,
         description="Figure checks the summary still fails; empty or null when it passed.",
     )
+    queue: QueueInfo | None = Field(
+        default=None, description="Present while the job is waiting for a free worker; null once it starts.")
     progress: Progress | None = Field(
         default=None, description="Present while the job is running; null before it starts and once it is done.")
     usage: Usage | None = Field(

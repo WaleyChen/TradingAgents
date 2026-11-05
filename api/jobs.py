@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from api.progress import ProgressBoard, eta_seconds
+from api.progress import ProgressBoard, eta_seconds, median_total, queue_estimate
 from api.schemas import (
     AnalysisJobResponse,
     AnalysisLinks,
@@ -24,6 +24,7 @@ from api.schemas import (
     CreateAnalysisRequest,
     JobStatus,
     Progress,
+    QueueInfo,
     StageUsage,
     Usage,
 )
@@ -59,6 +60,7 @@ class AnalysisJob:
     durations: dict[str, float] | None = None   # seconds per stage, kept for the estimate
     board: ProgressBoard = field(default_factory=ProgressBoard, repr=False)
     history: deque = field(default_factory=lambda: deque(maxlen=0), repr=False)   # the manager's recent stage times
+    queue_probe: Callable[[AnalysisJob], dict | None] | None = field(default=None, repr=False)
     created_at: datetime = field(default_factory=_utcnow)
     started_at: datetime | None = None
     completed_at: datetime | None = None
@@ -70,6 +72,10 @@ class AnalysisJob:
         eta = eta_seconds(self.board.stages(), snap.stage, self.board.elapsed_in_stage(), list(self.history))
         return Progress(stage=snap.stage, stage_index=snap.stage_index, stages_total=snap.stages_total,
                         started_at=snap.started_at, analysts_done=snap.analysts_done, eta_seconds=eta)
+
+    def _queue(self) -> QueueInfo | None:
+        info = self.queue_probe(self) if self.queue_probe and self.status == JobStatus.queued else None
+        return QueueInfo(**info) if info else None
 
     def _usage(self) -> Usage | None:
         if not self.usage:
@@ -98,6 +104,7 @@ class AnalysisJob:
             summary_figures=self.summary_figures,
             summary_problems=self.summary_problems,
             glossary=self.summary_glossary,
+            queue=self._queue(),
             progress=self._progress(),
             usage=self._usage(),
             error=self.error,
@@ -127,12 +134,28 @@ class JobManager:
         self._takes_board = "board" in inspect.signature(self._runner).parameters
         self._history: deque = deque(maxlen=20)    # stage durations of recently finished jobs
         self._store = store
+        self._workers = max_workers
         if store is not None:
             self._restore(store)
 
     @property
     def persisted(self) -> bool:
         return self._store is not None
+
+    def _queue_info(self, job: AnalysisJob) -> dict | None:
+        """Where a waiting job stands: its place, who is ahead, and when it should start and finish."""
+        with self._lock:
+            queued = sorted((j for j in self._jobs.values() if j.status == JobStatus.queued),
+                            key=lambda j: j.created_at)
+            running = [j for j in self._jobs.values() if j.status == JobStatus.running]
+        ids = [j.id for j in queued]
+        if job.id not in ids:
+            return None
+        ahead = ids.index(job.id)
+        remaining = [(p.eta_seconds if (p := j._progress()) else None) for j in running]
+        starts, finishes = queue_estimate(self._workers, remaining, ahead, median_total(list(self._history)))
+        return {"position": ahead + 1, "jobs_ahead": len(running) + ahead,
+                "starts_in_seconds": starts, "eta_seconds": finishes}
 
     def _save(self, job: AnalysisJob) -> None:
         if self._store is None:
@@ -154,7 +177,7 @@ class JobManager:
             self._jobs[job.id] = job
 
     def submit(self, request: CreateAnalysisRequest) -> AnalysisJob:
-        job = AnalysisJob(id=str(uuid.uuid4()), request=request, history=self._history)
+        job = AnalysisJob(id=str(uuid.uuid4()), request=request, history=self._history, queue_probe=self._queue_info)
         with self._lock:
             self._jobs[job.id] = job
             self._save(job)

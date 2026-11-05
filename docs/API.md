@@ -365,6 +365,20 @@ the remaining stages at their median duration over the last 20 finished jobs, ke
 is `null` until there is history, before a job starts and once it is done. `progress` is `null` when the
 job is queued, completed or failed.
 
+While a job is `queued`, `queue` says where it stands:
+
+```json
+"queue": { "position": 2, "jobs_ahead": 2, "starts_in_seconds": 1500, "eta_seconds": 1900 }
+```
+
+The service runs `TRADINGAGENTS_API_MAX_WORKERS` reports at once (default 1) and the rest wait in the order they
+were submitted. `jobs_ahead` counts the jobs running or waiting in front. `starts_in_seconds` and `eta_seconds`
+(until it finishes, queue included) come from the typical length of recent finished jobs and the time left on
+the ones running, and are `null` until there is history. `queue` is `null` once the job starts. A report takes
+about 8 to 11 minutes to run, and the wait in line is on top of that, so a client's timeout should count from
+`started_at`, or from submission with room for the queue, and should fetch the job before deciding it has timed
+out.
+
 A finished job carries `usage`: `calls`, `input_tokens`, `output_tokens` and an estimated `cost_usd` for each
 stage, and `total_cost_usd`. A cost is `null` when a model has no known price, never a wrong number.
 

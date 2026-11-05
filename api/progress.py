@@ -72,6 +72,30 @@ def eta_seconds(stages: list[str], stage: str | None, elapsed_in_stage: float,
     return round(left)
 
 
+def median_total(history: list[dict[str, float]]) -> float | None:
+    """How long a whole job usually takes: the median of the recent finished jobs' stage times added up."""
+    totals = [sum(h.values()) for h in history if h]
+    return statistics.median(totals) if totals else None
+
+
+def queue_estimate(workers: int, running_remaining: list[float | None], ahead_queued: int,
+                   median: float | None) -> tuple[int | None, int | None]:
+    """(seconds until a waiting job starts, seconds until it finishes), given who is running and who is ahead.
+
+    Each worker is a slot that frees up when its running job ends. A queued job takes the slot that frees
+    first and holds it for a typical job. With no history the times are unknown rather than guessed, except
+    that a free slot means it starts at once.
+    """
+    free = max(workers - len(running_remaining), 0)
+    if median is None:
+        return (0 if free else None), None
+    slots = sorted([median if r is None else float(r) for r in running_remaining] + [0.0] * free)
+    for _ in range(ahead_queued):
+        slots[0] += median
+        slots.sort()
+    return round(slots[0]), round(slots[0] + median)
+
+
 class ProgressBoard:
     """A job's view of its tracker; empty until the tracker is attached and the graph has started."""
 
