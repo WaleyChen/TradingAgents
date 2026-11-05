@@ -87,6 +87,8 @@ def build_default_config() -> dict:
     """
     return _apply_env_overrides({
         "results_dir": os.getenv("TRADINGAGENTS_RESULTS_DIR") or os.path.join(_TRADINGAGENTS_HOME, "logs"),
+        # Where the API keeps its jobs so their ids survive a restart (SQLite). Put it on a persistent disk.
+        "jobs_db_path": os.getenv("TRADINGAGENTS_JOBS_DB_PATH") or os.path.join(_TRADINGAGENTS_HOME, "jobs", "jobs.db"),
         "data_cache_dir": os.getenv("TRADINGAGENTS_CACHE_DIR") or os.path.join(_TRADINGAGENTS_HOME, "cache"),
         "memory_log_path": os.getenv("TRADINGAGENTS_MEMORY_LOG_PATH") or os.path.join(_TRADINGAGENTS_HOME, "memory", "trading_memory.md"),
         # Optional cap on the number of resolved memory log entries. When set,

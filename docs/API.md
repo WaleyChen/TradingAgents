@@ -325,6 +325,34 @@ and new enum values are additive and keep the version. `/health` lists the versi
 service reads in `context_schema_versions`. The schema file is generated from the same
 models that validate requests, and a test fails if it is stale.
 
+### Progress, usage and restarts
+
+While a job is `running`, the poll response carries `progress`:
+
+```json
+"progress": { "stage": "debate", "stage_index": 2, "stages_total": 5,
+              "started_at": "2026-11-05T14:02:11Z", "analysts_done": ["market", "news"], "eta_seconds": 140 }
+```
+
+`stage` is one of `analysts`, `debate`, `decision`, `plan`, `summary` (a run without the plan or summary
+step has fewer: see `stages_total`). The four analysts run in parallel, so they are one stage, and
+`analysts_done` says which have finished. A stage never goes backwards. `eta_seconds` is the time left,
+the remaining stages at their median duration over the last 20 finished jobs, kept across restarts. It
+is `null` until there is history, before a job starts and once it is done. `progress` is `null` when the
+job is queued, completed or failed.
+
+A finished job carries `usage`: `calls`, `input_tokens`, `output_tokens` and an estimated `cost_usd` for each
+stage, and `total_cost_usd`. A cost is `null` when a model has no known price, never a wrong number.
+
+Jobs are kept on the service's persistent disk (SQLite, the newest 500), so a job id still answers after a
+restart or a deploy. A job that was `queued` or `running` when the service stopped cannot be resumed: it
+comes back as `failed` with the error "the service restarted while this analysis was running; submit it
+again". A `failed` job's `error` is always a fixed message; the detail is in the service log.
+`GET /health` reports `jobs_persisted` and `storage_boots` (how many times the service has started on this
+storage; 2 or more means the disk persists). If the folder cannot be written the service logs a warning,
+runs in memory and `jobs_persisted` is `false`. The location is `TRADINGAGENTS_JOBS_DB_PATH` (default
+`~/.tradingagents/jobs/jobs.db`).
+
 ### Rating in plain words
 
 `decision` is the internal rating (`Buy`, `Overweight`, `Hold`, `Underweight`, `Sell`) and

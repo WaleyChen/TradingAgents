@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException, status
 
@@ -19,16 +20,18 @@ from api.schemas import (
     HealthResponse,
     JobStatus,
 )
+from api.store import boot_marker, open_store
 from tradingagents.context import (
     Context,
     check_context as run_context_checks,
     context_digest,
     derive_metrics,
 )
+from tradingagents.default_config import build_default_config
 
 
 def _max_workers() -> int:
-    raw = os.environ.get("TRADINGAGENTS_API_MAX_WORKERS", "1")
+    raw = os.environ.get("TRADINGAGENTS_API_MAX_WORKERS", "").strip() or "1"   # blank means the default
     try:
         value = int(raw)
     except ValueError as exc:
@@ -40,8 +43,16 @@ def _max_workers() -> int:
     return value
 
 
+def _default_manager() -> tuple[JobManager, int | None]:
+    """The manager the service runs with: jobs on disk when the folder can be used, else in memory."""
+    path = Path(build_default_config()["jobs_db_path"])
+    store = open_store(path)
+    marker = boot_marker(path.parent) if store is not None else None
+    return JobManager(max_workers=_max_workers(), store=store), marker["boots"] if marker else None
+
+
 def create_app(job_manager: JobManager | None = None) -> FastAPI:
-    manager = job_manager or JobManager(max_workers=_max_workers())
+    manager, boots = (job_manager, None) if job_manager is not None else _default_manager()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -61,7 +72,7 @@ def create_app(job_manager: JobManager | None = None) -> FastAPI:
 
     @app.get("/health", response_model=HealthResponse, tags=["ops"])
     def health() -> HealthResponse:
-        return HealthResponse()
+        return HealthResponse(jobs_persisted=manager.persisted, storage_boots=boots)
 
     @app.post(
         "/api/v1/context/check",

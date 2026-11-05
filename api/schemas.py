@@ -201,4 +201,7 @@ class ContextCheckResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: Literal["ok"] = "ok"
     context_schema_versions: list[int] = Field(default_factory=lambda: list(SUPPORTED_SCHEMA_VERSIONS))
+    jobs_persisted: bool = Field(default=False, description="Whether finished jobs are kept across restarts.")
+    storage_boots: int | None = Field(
+        default=None, description="Times the service has started on this storage; 2 or more shows the disk persists.")
     service: str = "tradingagents-api"

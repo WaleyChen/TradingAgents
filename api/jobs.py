@@ -34,6 +34,7 @@ from tradingagents.rating_label import plain_rating
 logger = logging.getLogger(__name__)
 
 FAILED_MESSAGE = "the analysis failed; see the service log"
+INTERRUPTED_MESSAGE = "the service restarted while this analysis was running; submit it again"
 
 
 def _utcnow() -> datetime:
@@ -54,6 +55,7 @@ class AnalysisJob:
     summary_problems: list[dict] | None = None
     error: str | None = None
     usage: dict[str, dict] | None = None
+    durations: dict[str, float] | None = None   # seconds per stage, kept for the estimate
     board: ProgressBoard = field(default_factory=ProgressBoard, repr=False)
     history: deque = field(default_factory=lambda: deque(maxlen=0), repr=False)   # the manager's recent stage times
     created_at: datetime = field(default_factory=_utcnow)
@@ -111,6 +113,7 @@ class JobManager:
         self,
         max_workers: int = 1,
         runner: Callable[[CreateAnalysisRequest], AnalysisResult | tuple] | None = None,
+        store=None,
     ):
         self._jobs: dict[str, AnalysisJob] = {}
         self._lock = threading.Lock()
@@ -121,11 +124,38 @@ class JobManager:
         self._runner = runner or run_analysis
         self._takes_board = "board" in inspect.signature(self._runner).parameters
         self._history: deque = deque(maxlen=20)    # stage durations of recently finished jobs
+        self._store = store
+        if store is not None:
+            self._restore(store)
+
+    @property
+    def persisted(self) -> bool:
+        return self._store is not None
+
+    def _save(self, job: AnalysisJob) -> None:
+        if self._store is None:
+            return
+        try:
+            self._store.save(job)
+        except Exception:  # a full disk must not fail the analysis
+            logger.exception("Could not save job %s", job.id)
+
+    def _restore(self, store) -> None:
+        """Load the jobs from before the restart; what was in flight cannot continue, so it is failed."""
+        for job in store.load_all():
+            job.history = self._history
+            if job.status in (JobStatus.queued, JobStatus.running):
+                job.status, job.error, job.completed_at = JobStatus.failed, INTERRUPTED_MESSAGE, _utcnow()
+                self._save(job)
+            elif job.status == JobStatus.completed and job.durations:
+                self._history.append(job.durations)
+            self._jobs[job.id] = job
 
     def submit(self, request: CreateAnalysisRequest) -> AnalysisJob:
         job = AnalysisJob(id=str(uuid.uuid4()), request=request, history=self._history)
         with self._lock:
             self._jobs[job.id] = job
+            self._save(job)
         logger.info(
             "Queued analysis job %s ticker=%s date=%s",
             job.id,
@@ -149,6 +179,7 @@ class JobManager:
     def _record_durations(self, job: AnalysisJob) -> None:
         durations = job.board.durations()
         if durations:
+            job.durations = durations
             self._history.append(durations)
 
     def _run_job(self, job_id: str) -> None:
@@ -159,6 +190,7 @@ class JobManager:
             job.status = JobStatus.running
             job.started_at = _utcnow()
             request = job.request
+            self._save(job)
 
         logger.info(
             "Started analysis job %s ticker=%s date=%s",
@@ -182,6 +214,7 @@ class JobManager:
                 self._record_durations(job)
                 job.status = JobStatus.completed
                 job.completed_at = _utcnow()
+                self._save(job)
             logger.info("Completed analysis job %s decision=%s", job_id, decision)
         except Exception:
             logger.exception("Analysis job %s failed", job_id)
@@ -191,3 +224,4 @@ class JobManager:
                 job.error = FAILED_MESSAGE   # the detail is in the log: a provider error can echo a key
                 job.usage = job.board.stage_usage() or None
                 job.completed_at = _utcnow()
+                self._save(job)
