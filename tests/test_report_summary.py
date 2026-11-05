@@ -13,7 +13,7 @@ from api.schemas import CreateAnalysisRequest
 from api.service import AnalysisResult, build_config
 from tests.test_context_financials import GOOD as FINANCIALS
 from tests.test_plan import GOOD as PLAN, READINGS
-from tradingagents.agents.structured import NO_HANDLES, ONE_VOICE, SOURCED_NUMBERS
+from tradingagents.agents.structured import NO_HANDLES, ONE_VOICE
 from tradingagents.context import Context
 from tradingagents.graph.conditional_logic import ConditionalLogic
 from tradingagents.graph.setup import GraphSetup
@@ -46,7 +46,12 @@ class ScriptedLLM:
 
 
 def _words(n):
-    return " ".join(["word"] * n)
+    """n words of readable text: ten-word sentences, three to a paragraph, so it raises no readability warning."""
+    out = []
+    for i in range(1, n + 1):
+        end = "." if i % 10 == 0 else ""
+        out.append("word" + end + ("\n\n" if i % 30 == 0 and i < n else ""))
+    return " ".join(out).replace("\n\n ", "\n\n")
 
 
 CONTEXT = Context.model_validate({"financials": FINANCIALS})
@@ -79,15 +84,15 @@ NET_MARGIN = Figure(label="net margin", value=63.8, unit="pct", source="context"
 
 @pytest.mark.unit
 def test_a_summary_within_the_limit_is_returned_as_written():
-    llm = ScriptedLLM(_words(580))
-    assert write_summary(llm, "material").text == _words(580)
+    llm = ScriptedLLM(_words(430))
+    assert write_summary(llm, "material").text == _words(430)
     assert len(llm.prompts) == 1
 
 
 @pytest.mark.unit
 def test_a_summary_that_runs_long_is_asked_for_again_with_its_length():
-    llm = ScriptedLLM(_words(MAX_WORDS + 50), _words(590))
-    assert word_count(write_summary(llm, "material").text) == 590
+    llm = ScriptedLLM(_words(MAX_WORDS + 50), _words(440))
+    assert word_count(write_summary(llm, "material").text) == 440
     assert str(MAX_WORDS + 50) in llm.prompts[1]
 
 
@@ -106,7 +111,8 @@ def test_an_empty_reply_is_not_a_summary():
 @pytest.mark.unit
 def test_a_failing_model_gives_no_summary_and_no_leaked_error_text():
     node = create_summary_node(ScriptedLLM(RuntimeError("sk-SECRET")))
-    assert node(STATE) == {"report_summary": None, "summary_figures": None, "summary_problems": []}
+    assert node(STATE) == {"report_summary": None, "summary_figures": None, "summary_problems": [],
+                            "summary_glossary": None}
 
 
 @pytest.mark.unit
@@ -116,7 +122,7 @@ def test_the_prompt_carries_the_whole_report_and_the_writing_rules():
     prompt = llm.prompts[0]
     for text in ("Underweight. Trim into strength.", "MARKET-TEXT", "SENTIMENT-TEXT",
                  "NEWS-TEXT", "FUNDAMENTALS-TEXT", "RESEARCH-PLAN", "TRADER-PLAN",
-                 ONE_VOICE, SOURCED_NUMBERS, NO_HANDLES):
+                 ONE_VOICE, NO_HANDLES):
         assert text in prompt
     assert out["report_summary"] == _words(500)
 
@@ -209,12 +215,12 @@ def test_a_summary_with_declared_and_matching_figures_comes_back_with_them_marke
 
 
 @pytest.mark.unit
-def test_an_undeclared_figure_is_sent_back_and_the_fix_is_accepted():
-    llm = StructuredLLM(_draft("Net margin 63.8% and a $500 target.", NET_MARGIN),
-                        _draft("Net margin 63.8%.", NET_MARGIN))
+def test_an_undeclared_figure_is_a_warning_and_is_not_worth_a_retry():
+    llm = StructuredLLM(_draft("Net margin 63.8% and a $500 target.", NET_MARGIN))
     outcome = write_summary(llm, "material", known=KNOWN)
-    assert outcome.text == "Net margin 63.8%." and outcome.problems == []
-    assert "$500 appears in the text but is not in the figures list" in llm.prompts[1]
+    assert len(llm.prompts) == 1                                  # no second call for something harmless
+    assert outcome.text == "Net margin 63.8% and a $500 target."
+    assert [(p["code"], p["severity"]) for p in outcome.problems] == [("undeclared_figure", "warning")]
 
 
 @pytest.mark.unit

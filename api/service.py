@@ -23,6 +23,7 @@ class AnalysisResult(NamedTuple):
     summary: str | None = None
     summary_figures: list[dict[str, Any]] | None = None
     summary_problems: list[dict[str, str]] | None = None
+    summary_glossary: list[dict[str, str]] | None = None
 
 
 def build_config(request: CreateAnalysisRequest) -> dict[str, Any]:
@@ -103,4 +104,5 @@ def run_analysis(request: CreateAnalysisRequest, board: ProgressBoard | None = N
         final_state.get("report_summary"),
         final_state.get("summary_figures"),
         final_state.get("summary_problems"),
+        final_state.get("summary_glossary"),
     )

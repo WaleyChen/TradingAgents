@@ -23,22 +23,23 @@ from tradingagents.agents.structured import (
     NO_EXTERNAL_TOOLS,
     NO_HANDLES,
     ONE_VOICE,
-    SOURCED_NUMBERS,
     bind_structured,
     invoke_structured,
 )
 from tradingagents.context import Context
 from tradingagents.context.render import render_context
+from tradingagents.glossary import GLOSSARY, glossary_for
 from tradingagents.plan.check import Readings
 from tradingagents.plan.generate import _readings_block
 from tradingagents.plan.render import render_plan
 from tradingagents.rating_label import plain_rating
+from tradingagents.readability import readability_problems
 from tradingagents.summary_check import SummaryDraft, annotate, check_summary, known_values
 
 logger = logging.getLogger(__name__)
 
-TARGET_WORDS = 600
-MAX_WORDS = 700
+TARGET_WORDS = 450
+MAX_WORDS = 550
 DEFAULT_RETRIES = 2
 
 _SECTIONS = (
@@ -54,6 +55,8 @@ _SECTIONS = (
 # What the decision-makers already digested from the analysts' full reports.
 _DECISION_SECTIONS = tuple(s for s in _SECTIONS if s[1] in
                            ("final_trade_decision", "investment_plan", "trader_investment_plan"))
+
+_TERMS = ", ".join(entry.term for entry in GLOSSARY)
 
 _FIGURES = """\
 Also fill `figures`: one entry for every dollar amount, percentage and multiple (like 9.1x)
@@ -118,7 +121,20 @@ If there is a position plan, give the position plan's target and expected return
 no other price target, even if another section states one; never call a moving average
 or a support level a target or a fair value.
 
-{ONE_VOICE} {SOURCED_NUMBERS} {NO_HANDLES}
+Write in plain words, as you would explain it to a friend who trades but does not read filings. Use
+short paragraphs of two or three sentences, sentences of no more than 20 words, and start each
+paragraph with a bold lead-in phrase.
+
+Round the numbers in the text: "$133 billion", "64%", "about 3 times". Still list each one in `figures`
+with its exact value. Do not put sources, filing names or dates in brackets in the
+sentences: the figures list carries each figure's source and period, and the page shows it. Name a
+date in the text only when the date itself matters ("as of the quarter ended Sept 30"). Say "about",
+"roughly" or "reportedly" for a figure that is your own estimate or that the data did not confirm.
+
+The page defines these terms for the reader, so you may use them: {_TERMS}. Explain any other jargon
+in a few words, or use a plain word instead.
+
+{ONE_VOICE} {NO_HANDLES}
 {NO_EXTERNAL_TOOLS}
 
 {_FIGURES}
@@ -131,6 +147,8 @@ def _problems(draft: SummaryDraft, known, *, figures: bool = True) -> list[dict[
     """Figure problems (when the model declared figures to check) and the length limit."""
     found = ([{"code": p.code, "subject": p.subject, "message": p.message, "severity": p.severity}
               for p in check_summary(draft, known)] if figures else [])
+    found += [{"code": p.code, "subject": p.subject, "message": p.message, "severity": p.severity}
+              for p in readability_problems(draft.text)]
     count = word_count(draft.text)
     if count > MAX_WORDS:
         found.insert(0, {"code": "too_long", "subject": "summary", "severity": "error",
@@ -160,7 +178,7 @@ def write_summary(llm, material: str, *, ticker: str = "", trade_date: str = "",
                          "message": "the reply was empty"}]
         else:
             problems = _problems(draft, known, figures=checked)
-            if not problems:
+            if not any(p["severity"] == "error" for p in problems):   # a warning is not worth another call
                 break
         prompt = (f"{prompt}\n\nYour last attempt failed these checks; fix every one:\n"
                   + "\n".join(f"- {p['message']}" for p in problems))
@@ -193,11 +211,13 @@ def create_summary_node(llm, context: Context | None = None, include_reports: bo
                 trade_date=state["trade_date"], known=_known(run, readings, state.get("position_plan")))
         except Exception:  # the report is done; a failure here must not discard it
             logger.exception("Summary: unexpected failure for %s", state.get("company_of_interest"))
-            return {"report_summary": None, "summary_figures": None, "summary_problems": []}
+            return {"report_summary": None, "summary_figures": None, "summary_problems": [],
+                    "summary_glossary": None}
         if outcome.problems:
             logger.warning("Summary for %s has problems: %s", state.get("company_of_interest"),
                            [(p["code"], p["subject"]) for p in outcome.problems])
         return {"report_summary": outcome.text, "summary_figures": outcome.figures,
-                "summary_problems": outcome.problems}
+                "summary_problems": outcome.problems,
+                "summary_glossary": glossary_for(outcome.text) if outcome.text else None}
 
     return summary_node

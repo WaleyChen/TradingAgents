@@ -74,6 +74,7 @@ class AgentState(MessagesState):
     verified_blocks: Annotated[dict, "The caller's verified data as each kind of agent reads it (market, news, fundamentals, decision); empty when none was supplied"]
     verified_readings: Annotated[dict | None, "The verified price and indicator readings the Plan step checked against; None when the step is off or had no market data"]
     summary_figures: Annotated[list | None, "The summary's declared figures, each marked verified only when checked in code against the caller's context, the readings or the plan; None when none were declared"]
+    summary_glossary: Annotated[list | None, "Plain meanings of the defined market terms the summary uses, found in code; None when there is no summary"]
     summary_problems: Annotated[list | None, "Checks the summary still fails after its retries: [{code, subject, message}]"]
     report_summary: Annotated[str | None, "Short single-voice summary of the whole report from the Summary step; None when the step is off or none fit the length limit"]
     past_context: Annotated[str, "Memory log context for the Portfolio Manager (same-ticker decisions + cross-ticker lessons), written by the Memory Log step"]

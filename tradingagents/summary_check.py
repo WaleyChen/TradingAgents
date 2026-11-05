@@ -28,6 +28,7 @@ _SCALE = {"usd": 1.0, "usd_millions": 1e6, "usd_billions": 1e9, "pct": 1.0, "x":
 _KIND = {"usd": "usd", "usd_millions": "usd", "usd_billions": "usd", "pct": "pct", "x": "x", "number": "number"}
 _TOLERANCE = 0.01          # a figure may differ from its source by 1%: the text rounds
 _MIN_TOLERANCE = 0.01
+_TEXT_TOLERANCE = 0.02      # the text may round a declared figure by up to 2%
 MAX_FIGURES = 60
 
 
@@ -71,8 +72,8 @@ def normalize(value: float, unit: str) -> tuple[str, float]:
     return _KIND[unit], value * _SCALE[unit]
 
 
-def _close(a: float, b: float) -> bool:
-    return abs(a - b) <= max(_MIN_TOLERANCE, _TOLERANCE * abs(b))
+def _close(a: float, b: float, tolerance: float = _TOLERANCE) -> bool:
+    return abs(a - b) <= max(_MIN_TOLERANCE, tolerance * abs(b))
 
 
 # --- what the text states ---------------------------------------------------
@@ -256,13 +257,20 @@ def check_summary(draft: SummaryDraft, known: list[Known]) -> list[SummaryProble
                             f"{f.label}: {f.value:g} ({f.unit}) is not in the {f.source} data")
              for f in draft.figures if f.source in VERIFIABLE and not _matches(f, known)]
     declared = [normalize(f.value, f.unit) for f in draft.figures]
-    seen = set()
-    for kind, value, raw in figures_in_text(draft.text):
-        if raw not in seen and not any(k == kind and _close(value, v) for k, v in declared):
-            found.append(SummaryProblem("undeclared_figure", raw,
-                                        f"{raw} appears in the text but is not in the figures list", "warning"))
+    stated = figures_in_text(draft.text)
+    seen, undeclared = set(), []
+    for kind, value, raw in stated:
+        if raw not in seen and not any(k == kind and _close(value, v, _TEXT_TOLERANCE) for k, v in declared):
+            undeclared.append(SummaryProblem("undeclared_figure", raw,
+                                             f"{raw} appears in the text but is not in the figures list", "warning"))
         seen.add(raw)
-    return found
+    distinct = len({raw for _, _, raw in stated})
+    if distinct >= 3 and len(undeclared) / distinct > 0.5:   # the list was skipped, not just short by one
+        found.append(SummaryProblem(
+            "figures_not_declared", "figures",
+            f"you declared {distinct - len(undeclared)} of the {distinct} dollar amounts, percentages and multiples "
+            "in the text: list every one in `figures`, with its exact value, unit, source and period"))
+    return found + undeclared
 
 
 def annotate(figures: list[Figure], known: list[Known]) -> list[dict[str, Any]]:

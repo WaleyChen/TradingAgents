@@ -53,6 +53,7 @@ class AnalysisJob:
     summary: str | None = None
     summary_figures: list[dict] | None = None
     summary_problems: list[dict] | None = None
+    summary_glossary: list[dict] | None = None
     error: str | None = None
     usage: dict[str, dict] | None = None
     durations: dict[str, float] | None = None   # seconds per stage, kept for the estimate
@@ -96,6 +97,7 @@ class AnalysisJob:
             summary=self.summary,
             summary_figures=self.summary_figures,
             summary_problems=self.summary_problems,
+            glossary=self.summary_glossary,
             progress=self._progress(),
             usage=self._usage(),
             error=self.error,
@@ -200,7 +202,7 @@ class JobManager:
         )
         try:
             run = self._runner(request, board=job.board) if self._takes_board else self._runner(request)
-            decision, reports, plan, plan_error, summary, figures, problems = AnalysisResult(*run)
+            decision, reports, plan, plan_error, summary, figures, problems, glossary = AnalysisResult(*run)
             with self._lock:
                 job = self._jobs[job_id]
                 job.decision = decision
@@ -210,6 +212,7 @@ class JobManager:
                 job.summary = summary
                 job.summary_figures = figures
                 job.summary_problems = problems
+                job.summary_glossary = glossary
                 job.usage = job.board.stage_usage() or None
                 self._record_durations(job)
                 job.status = JobStatus.completed

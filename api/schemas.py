@@ -132,6 +132,11 @@ class Usage(BaseModel):
     total_cost_usd: float | None = Field(description="Sum over the stages; null if any stage has no cost.")
 
 
+class GlossaryTerm(BaseModel):
+    term: str
+    meaning: str
+
+
 class AnalysisReports(BaseModel):
     market_report: str | None = None
     sentiment_report: str | None = None
@@ -163,11 +168,16 @@ class AnalysisJobResponse(BaseModel):
     context_digest: str | None = None
     summary: str | None = Field(
         default=None,
-        description="About 600 words in one analyst voice; null when the step is off or none fit the length limit.",
+        description="About 450 words in one analyst voice, in plain language for retail readers; null when the step is off or none fit the length limit.",
     )
     summary_figures: list[SummaryFigure] | None = Field(
         default=None,
         description="Every dollar, percent and multiple in the summary, with its source; null when none were declared.",
+    )
+    glossary: list[GlossaryTerm] | None = Field(
+        default=None,
+        description="Plain meanings of the defined market terms the summary uses, in the order they first "
+                    "appear. Show them as tooltips or a list; null when there is no summary.",
     )
     summary_problems: list[SummaryProblem] | None = Field(
         default=None,

@@ -374,21 +374,27 @@ weight" or "model portfolio".
 
 ### Summary
 
-A completed job also carries `summary`: about 600 words (never more than 700) in
-one analyst's voice, covering the rating and what to do now, what decided it, the
-risks and what would change the view, and the plan's levels. Figures carry a source
-and date and are marked as derived or unverified where that applies. It is written
-by one more model call after the decision. If none fits the length limit after
-retries, `summary` is `null`; the reports are still valid. Set
-`TRADINGAGENTS_REPORT_SUMMARY=0` to turn the step off.
+A completed job also carries `summary`: about 450 words (never more than 550) in one analyst's voice,
+written for a retail reader. It covers the rating and what to do now, what decided it, the risks and what
+would change the view, and the plan's levels. It is written in plain words, in short paragraphs that each
+start with a bold lead-in, with rounded numbers ("$133 billion", "64%") and no source tags or filing dates in
+brackets: each figure's exact value, source and period are in `summary_figures`, which the page shows
+beside it. It is written by one more model call after the decision. If none fits the length limit after
+retries, `summary` is `null`; the reports are still valid. Set `TRADINGAGENTS_REPORT_SUMMARY=0` to turn the
+step off.
 
-`reports` and the saved report files are the appendix: the analysts' full text and
-the internal debate, written for the record rather than the customer. They still
-name internal roles ("bull", "aggressive analyst"), so show `summary`, not them.
-Treat the text as untrusted model output and escape it when you show it.
+`glossary` lists the defined market terms the summary uses ("RSI", "Free cash flow", "Moving average", ...),
+in the order they first appear, each with a one-sentence plain meaning (`[{"term", "meaning"}]`). The meanings
+are fixed text in the service, found in the summary by code, so a term means the same on every report.
+Show them as tooltips or a short list. It is `null` when there is no summary.
+
+`reports` and the saved report files are the appendix: the analysts' full text and the internal debate,
+written for the record rather than the customer. They still name internal roles ("bull", "aggressive
+analyst"), so show `summary`, not them. Treat the text as untrusted model output and escape it when you
+show it.
 
 **Checked figures.** The summary declares every dollar amount, percentage and multiple
-it states. `summary_figures` lists them, each with `label`, `value`, `unit` (`usd`,
+it states, with its exact value. `summary_figures` lists them, each with `label`, `value`, `unit` (`usd`,
 `usd_millions`, `usd_billions`, `pct`, `x`, `number`), `source` (`context`, `readings`,
 `plan`, `analyst_report`, `derived`) and `period`, plus `verified`. `verified` is true only
 when the figure was checked in code against your supplied `context`, the service's own
@@ -398,7 +404,10 @@ after the model's retries, the summary is returned anyway and `summary_problems`
 `{code, subject, message, severity}` for each. `severity: "error"`: `figure_not_in_source`
 (a figure claimed from verified data is not in it) or `too_long`. `severity: "warning"`:
 `undeclared_figure` (a dollar, percent or multiple appears in the text but not in the list),
-which only means that figure is unverified, never that it claims verification. Hide the
+which only means that figure is unverified, never that it claims verification. A summary that declares fewer than half of the figures it states fails a check
+(`figures_not_declared`, an error) and is retried; a warning alone is never retried. It also gets warnings,
+never retries, for sentences that average over 22 words (`long_sentences`) or paragraphs of more than five
+sentences or 90 words (`long_paragraph`). Hide the
 summary or show a warning when any problem has `severity: "error"`; warnings need no action. Both fields are `null` when the provider could not return structured output.
 This cannot see a bare number with no `$`, `%` or `x`, or a wrong figure within 1% of a real one.
 

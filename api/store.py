@@ -38,7 +38,7 @@ def _to_record(job: AnalysisJob) -> dict[str, Any]:
     return {
         "id": job.id, "request": job.request.model_dump(mode="json"), "status": job.status.value,
         "decision": job.decision, "reports": job.reports, "plan": job.plan, "plan_error": job.plan_error,
-        "summary": job.summary, "summary_figures": job.summary_figures, "summary_problems": job.summary_problems,
+        "summary": job.summary, "summary_figures": job.summary_figures, "summary_problems": job.summary_problems, "glossary": job.summary_glossary,
         "error": job.error, "usage": job.usage, "durations": job.durations,
         "created_at": _iso(job.created_at), "started_at": _iso(job.started_at),
         "completed_at": _iso(job.completed_at),
@@ -50,7 +50,7 @@ def _from_record(rec: dict[str, Any]) -> AnalysisJob:
         id=rec["id"], request=CreateAnalysisRequest.model_validate(rec["request"]),
         status=JobStatus(rec["status"]), decision=rec["decision"], reports=rec["reports"], plan=rec["plan"],
         plan_error=rec["plan_error"], summary=rec["summary"], summary_figures=rec["summary_figures"],
-        summary_problems=rec["summary_problems"], error=rec["error"], usage=rec["usage"],
+        summary_problems=rec["summary_problems"], summary_glossary=rec.get("glossary"), error=rec["error"], usage=rec["usage"],
         durations=rec["durations"], created_at=_when(rec["created_at"]), started_at=_when(rec["started_at"]),
         completed_at=_when(rec["completed_at"]),
     )
