@@ -409,3 +409,13 @@ def test_the_summary_is_asked_what_changed_since_the_last_report_without_being_a
     prompt = " ".join(llm.prompts[0].split())
     assert "how the view has changed" in prompt and "toward or away from the old target" in prompt
     assert "Do not let the previous rating decide the new one" in prompt
+
+
+@pytest.mark.unit
+def test_with_no_position_plan_the_summary_is_told_not_to_cite_one():
+    from tradingagents.report_summary import _material
+
+    without = _material({**STATE, "position_plan": None}, None, None)
+    assert "No position plan was produced" in without and "do not cite `plan`" in without
+    with_plan = _material({**STATE, "position_plan": PLAN}, None, None)
+    assert "No position plan was produced" not in with_plan

@@ -122,7 +122,9 @@ def _context_values(context: Context) -> list[Known]:
     if context.price is not None:
         found.append(Known("price close", "usd", context.price.close, "context"))
     if context.technicals is not None:
-        found += _technicals_values(context.technicals)
+        levels = _technicals_values(context.technicals)
+        # When supplied, these are also the service's own readings, so either source name is honest.
+        found += levels + [Known(k.label, k.kind, k.value, "readings") for k in levels]
     if context.ownership is not None:
         found += _ownership_values(context.ownership)
     found += _market_values(context)
@@ -156,6 +158,8 @@ def _technicals_values(t) -> list[Known]:
         label = (name.replace("pct_vs_", "pct vs ").replace("pct_from_", "pct from ")
                  if name.startswith("pct_") else name.replace("_", " "))
         found.append(Known(label, "x" if name == "volume_vs_average" else "pct", float(value), "context"))
+        if name.startswith("pct_") and value < 0:   # "18.2% below" is written without its sign
+            found.append(Known(label, "pct", abs(float(value)), "context"))
     return found
 
 
@@ -265,7 +269,8 @@ def check_summary(draft: SummaryDraft, known: list[Known]) -> list[SummaryProble
     stated = figures_in_text(draft.text)
     seen, undeclared = set(), []
     for kind, value, raw in stated:
-        if raw not in seen and not any(k == kind and _close(value, v, _TEXT_TOLERANCE) for k, v in declared):
+        if raw not in seen and not any(k == kind and _close(abs(value) if kind == "pct" else value, abs(v) if kind == "pct" else v,
+                                             _TEXT_TOLERANCE) for k, v in declared):
             undeclared.append(SummaryProblem("undeclared_figure", raw,
                                              f"{raw} appears in the text but is not in the figures list", "warning"))
         seen.add(raw)

@@ -145,3 +145,29 @@ def test_scale_words_are_read_in_any_case():
                  "a $450M charge"):
         found = [v for kind, v, _ in figures_in_text(text) if kind == "usd"]
         assert found and abs(found[0] - 450e6) < 1e6, text
+
+
+@pytest.mark.unit
+def test_a_distance_declared_without_its_sign_still_matches_the_signed_one():
+    from tests.test_context_technicals import TECH
+    from tradingagents.context import Context
+
+    known = known_values(Context.model_validate({"technicals": TECH}), None, None)
+    below = [Figure(label="vs 50-day", value=v, unit="pct", source="context") for v in (18.2, -18.2)]
+    for figure in below:
+        assert check_summary(SummaryDraft(text="18.2% below.", figures=[figure]), known) == []
+    wrong = Figure(label="vs 50-day", value=25.0, unit="pct", source="context")
+    assert [p.code for p in check_summary(SummaryDraft(text="25% below.", figures=[wrong]), known)
+            if p.severity == "error"] == ["figure_not_in_source"]
+
+
+@pytest.mark.unit
+def test_supplied_technicals_can_be_cited_as_readings_or_as_context():
+    from tests.test_context_technicals import TECH
+    from tradingagents.context import Context
+
+    known = known_values(Context.model_validate({"technicals": TECH}), None, None)
+    for source in ("context", "readings"):
+        close = Figure(label="close", value=795.23, unit="usd", source=source)
+        distance = Figure(label="vs 20-day", value=13.1, unit="pct", source=source)
+        assert check_summary(SummaryDraft(text="$795.23, 13.1% below.", figures=[close, distance]), known) == []

@@ -470,3 +470,28 @@ def test_an_invented_field_that_says_something_is_still_refused():
     data["surprise"] = 0
     with pytest.raises(ValidationError):
         Plan.model_validate(data)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("empty", ["", None, [], {}])
+def test_an_invented_field_with_an_empty_value_is_dropped_whatever_kind_of_empty(empty):
+    data = copy.deepcopy(GOOD)
+    for leg in (*data["entries"], *data["exits"]):
+        leg["trigger_note"] = empty                                  # what a real model emitted, as an empty string
+    data["now"]["extra_note"] = empty
+    data["watch"][0]["note"] = empty
+    assert Plan.model_validate(data).entries[0].portfolio_pct == 3.0
+
+
+@pytest.mark.unit
+def test_an_empty_value_in_a_field_we_do_know_is_still_an_error():
+    data = copy.deepcopy(GOOD)
+    data["entries"][0]["reason"] = ""
+    with pytest.raises(ValidationError):
+        Plan.model_validate(data)
+    data = copy.deepcopy(GOOD)
+    data["entries"][0]["trigger"]["timeframe"] = ""                  # empty and unknown inside a trigger: harmless
+    assert Plan.model_validate(data)
+    data["entries"][0]["trigger"]["timeframe"] = "weekly"            # but one that says something could change its meaning
+    with pytest.raises(ValidationError):
+        Plan.model_validate(data)

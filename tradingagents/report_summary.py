@@ -98,6 +98,9 @@ def _material(state: dict, context: Context | None, readings: Readings | None,
             parts.append(f"## Position plan\n{render_plan(plan)}")
         except ValueError:  # an unrenderable plan must not lose the summary
             logger.warning("Summary: the position plan could not be rendered")
+    else:
+        parts.append("## Position plan\nNo position plan was produced. Do not describe plan levels and do not cite "
+                     "`plan` as a source; give any price levels from the reports and cite them as `analyst_report`.")
     return "\n\n".join(parts)
 
 

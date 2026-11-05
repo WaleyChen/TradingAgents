@@ -39,10 +39,11 @@ IndicatorName = Literal[
 
 
 class _Strict(BaseModel):
-    """Closed: an unknown field is refused, unless it is null, which says nothing and is dropped.
+    """Closed: an unknown field is refused, unless its value is empty, which says nothing and is dropped.
 
-    A model sometimes adds an invented field set to null. Throwing the whole plan away for that
-    costs a retry and protects nothing; one that carries a value is still refused.
+    A model sometimes adds an invented field set to null or "" (an entry_note, a trigger_note).
+    Throwing the whole plan away for that costs a retry and protects nothing. One that carries a
+    value is still refused: a stray "timeframe": "weekly" could change what a trigger means.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
@@ -51,7 +52,8 @@ class _Strict(BaseModel):
     @classmethod
     def _drop_null_unknowns(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            return {k: v for k, v in data.items() if v is not None or k in cls.model_fields}
+            return {k: v for k, v in data.items()
+                    if k in cls.model_fields or not (v is None or v == [] or v == {} or (isinstance(v, str) and not v.strip()))}
         return data
 
 
