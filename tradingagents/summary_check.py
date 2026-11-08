@@ -17,7 +17,12 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from tradingagents.context import Context, derive_metrics
-from tradingagents.context.derive import derive_ownership, derive_technicals, sale_share_of_holding
+from tradingagents.context.derive import (
+    derive_ownership,
+    derive_revenue_breakdown,
+    derive_technicals,
+    sale_share_of_holding,
+)
 from tradingagents.plan.check import Readings
 
 Unit = Literal["usd", "usd_millions", "usd_billions", "pct", "x", "number"]
@@ -182,9 +187,25 @@ def _market_values(context: Context) -> list[Known]:
         found += ([Known("buffett indicator", "pct", b.buffett_indicator_pct.value, "context")]
                   if b.buffett_indicator_pct else [])
         found += [Known("credit spread", "number", b.credit_spread_hy_bps.value, "context")] if b.credit_spread_hy_bps else []
+    if context.revenue_breakdown is not None:
+        found += _revenue_values(context.revenue_breakdown)
     for r in context.prior_reports:
         found += [Known("prior target", "usd", r.target, "context")] if r.target is not None else []
         found.append(Known("prior price", "usd", r.price_then, "context"))
+    return found
+
+
+def _revenue_values(rb) -> list[Known]:
+    """Each bucket's revenue, share of total and growth, and the total: the figures of the supplied table."""
+    table = derive_revenue_breakdown(rb)
+    found = [Known("total revenue", "usd", float(rb.total_revenue), "context")]
+    found += [Known("total revenue growth", "pct", table["total_yoy_pct"], "context")] if table["total_yoy_pct"] is not None else []
+    for view in table["views"]:
+        for row in view["rows"]:
+            found.append(Known(f"{row['name']} revenue", "usd", float(row["revenue"]), "context"))
+            found.append(Known(f"{row['name']} share of revenue", "pct", row["share_pct"], "context"))
+            if row["yoy_pct"] is not None:
+                found.append(Known(f"{row['name']} revenue growth", "pct", row["yoy_pct"], "context"))
     return found
 
 

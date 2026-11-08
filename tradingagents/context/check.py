@@ -23,6 +23,7 @@ from tradingagents.context.models import (
     Ownership,
     Price,
     PriorReport,
+    RevenueBreakdown,
     Statement,
     Technicals,
     ValuationHistory,
@@ -428,12 +429,57 @@ def check_events(e: Events) -> list[Problem]:
     return found
 
 
+def _view_problems(view, i: int, rb: RevenueBreakdown) -> list[Problem]:
+    path, found, seen = f"revenue_breakdown.views[{i}]", [], set()
+    for j, seg in enumerate(view.segments):
+        key = " ".join(seg.name.split()).casefold()
+        if key in seen:
+            found.append(Problem("segment_duplicate", f"{path}.segments[{j}].name",
+                                 f"{seg.name!r} is listed twice in this view"))
+        seen.add(key)
+        if seg.revenue == 0:
+            found.append(_zero(seg.name, f"{path}.segments[{j}].revenue", "revenue"))
+        if seg.prior_year_revenue == 0:
+            found.append(_zero(seg.name, f"{path}.segments[{j}].prior_year_revenue", "prior-year revenue"))
+    total = sum(seg.revenue for seg in view.segments)
+    if abs(total - rb.total_revenue) > rb.total_revenue * _TOLERANCE:
+        found.append(Problem("revenue_breakdown_total", path,
+                             f"the {view.dimension} buckets add to {_money(total)}, not the reported total "
+                             f"{_money(rb.total_revenue)}"))
+    priors = [seg.prior_year_revenue for seg in view.segments]
+    if rb.prior_year_total is not None and all(p is not None for p in priors) \
+            and abs(sum(priors) - rb.prior_year_total) > rb.prior_year_total * _TOLERANCE:
+        found.append(Problem("revenue_breakdown_prior_total", path,
+                             f"the prior-year {view.dimension} buckets add to {_money(sum(priors))}, not "
+                             f"{_money(rb.prior_year_total)}"))
+    return found
+
+
+def check_revenue_breakdown(rb: RevenueBreakdown, financials: Financials | None) -> list[Problem]:
+    found = []
+    if rb.period_end > rb.as_of:
+        found.append(Problem("breakdown_period_after_as_of", "revenue_breakdown.period_end",
+                             f"the period ends {rb.period_end}, after the data's date {rb.as_of}"))
+    for i, view in enumerate(rb.views):
+        found += _view_problems(view, i, rb)
+    if financials is not None:
+        rows = financials.quarterly if rb.kind == "standalone" else financials.annual
+        for s in rows:
+            reported = s.income.revenue if s.income is not None else None
+            if s.period_end == rb.period_end and reported and abs(reported - rb.total_revenue) > rb.total_revenue * _TOLERANCE:
+                found.append(Problem("revenue_breakdown_vs_financials", "revenue_breakdown.total_revenue",
+                                     f"the breakdown's total {_money(rb.total_revenue)} differs from the "
+                                     f"financials' revenue {_money(reported)} for the period ending {rb.period_end}"))
+    return found
+
+
 def check_context(context: Context, *, ticker: str | None = None, trade_date: date | None = None) -> list[Problem]:
     """Every problem with the context, including ties to the request when it is given."""
     found = []
     blocks = [("financials", context.financials), ("price", context.price), ("events", context.events),
               ("company", context.company), ("technicals", context.technicals), ("ownership", context.ownership),
-              ("valuation_history", context.valuation_history), ("earnings_release", context.earnings_release)]
+              ("valuation_history", context.valuation_history), ("earnings_release", context.earnings_release),
+              ("revenue_breakdown", context.revenue_breakdown)]
     if context.financials is not None:
         found += check_financials(context.financials)
     if context.events is not None:
@@ -450,6 +496,8 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
         found += check_earnings_release(context.earnings_release, trade_date)
     if context.market_backdrop is not None:
         found += check_backdrop(context.market_backdrop)
+    if context.revenue_breakdown is not None:
+        found += check_revenue_breakdown(context.revenue_breakdown, context.financials)
     found += check_prior_reports(context.prior_reports, trade_date)
     if ticker is not None:
         found += [Problem("ticker_mismatch", f"prior_reports[{i}].ticker",
@@ -468,7 +516,8 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
         if context.price is not None:
             found += check_price(context.price, trade_date)
         for name, block in (("valuation_history", context.valuation_history),
-                            ("market_backdrop", context.market_backdrop)):
+                            ("market_backdrop", context.market_backdrop),
+                            ("revenue_breakdown", context.revenue_breakdown)):
             if block is not None and block.as_of > trade_date:
                 found.append(Problem("as_of_after_trade_date", f"{name}.as_of",
                                      f"the {name.replace('_', ' ')} is dated {block.as_of}, after the run date {trade_date}"))

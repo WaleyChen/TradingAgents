@@ -343,6 +343,37 @@ class EarningsRelease(_Company):
         return value
 
 
+class Segment(_Strict):
+    """One bucket of revenue as the company reports it (a product line, a segment or a region)."""
+
+    name: Label
+    revenue: Annotated[int, Field(gt=-MAX_AMOUNT, lt=MAX_AMOUNT)]     # may be negative: hedging, eliminations
+    prior_year_revenue: Amount    # the same period a year earlier; null if the company did not restate it
+    includes: Annotated[str, Field(min_length=1, max_length=200)] | None = None
+
+
+class RevenueView(_Strict):
+    """The whole of revenue cut one way. Buckets cover the total, so they add up to it."""
+
+    dimension: Literal["product", "segment", "geography"]
+    segments: list[Segment] = Field(min_length=2, max_length=20)
+
+
+class RevenueBreakdown(_Company):
+    """Where one period's revenue came from. Shares and growth are computed here from these amounts."""
+
+    currency: Literal["USD"]
+    source: Source
+    as_of: date
+    fiscal_period: Label
+    period_end: date
+    kind: Literal["standalone", "annual"]
+    total_revenue: Annotated[int, Field(gt=0, lt=MAX_AMOUNT)]
+    prior_year_total: Annotated[int | None, Field(default=None, gt=0, lt=MAX_AMOUNT)]
+    views: list[RevenueView] = Field(min_length=1, max_length=3)
+    footnotes: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=5)
+
+
 class Context(_Strict):
     """What a caller supplies with a request. Only the blocks defined here are accepted."""
 
@@ -357,5 +388,6 @@ class Context(_Strict):
     market_backdrop: MarketBackdrop | None = None
     prior_reports: list[PriorReport] = Field(default_factory=list, max_length=3)
     earnings_release: EarningsRelease | None = None
+    revenue_breakdown: RevenueBreakdown | None = None
     notes: str | None = Field(default=None, max_length=MAX_NOTES,
                               description="Free text. Unverified: context only, never a source for a figure.")

@@ -155,6 +155,30 @@ class AnalysisReports(BaseModel):
     final_trade_decision: str | None = None
 
 
+class RevenueRow(BaseModel):
+    name: str
+    revenue: int = Field(description="Whole US dollars for the period; can be negative (hedging, eliminations).")
+    share_pct: float = Field(description="Share of the reported total revenue, computed by the service.")
+    yoy_pct: float | None = Field(
+        default=None, description="Growth over the same period a year earlier; null when no year-ago figure was sent.")
+    includes: str | None = Field(default=None, description="What the company says the bucket covers, as sent.")
+
+
+class RevenueTableView(BaseModel):
+    dimension: Literal["product", "segment", "geography"]
+    rows: list[RevenueRow]
+
+
+class RevenueTable(BaseModel):
+    fiscal_period: str
+    period_end: date
+    source: str
+    total_revenue: int
+    total_yoy_pct: float | None = None
+    views: list[RevenueTableView]
+    footnotes: list[str] = Field(description="The company's own disclosure notes, as sent by the caller.")
+
+
 class AnalysisJobResponse(BaseModel):
     id: str
     status: JobStatus
@@ -191,6 +215,11 @@ class AnalysisJobResponse(BaseModel):
         default=None,
         description="Figure checks the summary still fails; empty or null when it passed.",
     )
+    revenue_breakdown: RevenueTable | None = Field(
+        default=None,
+        description="Revenue by product, segment or region for the latest period, with each bucket's share of the "
+                    "total and its growth, computed from the request's context.revenue_breakdown; null when none was sent. "
+                    "Render it as a table or chart.")
     queue: QueueInfo | None = Field(
         default=None, description="Present while the job is waiting for a free worker; null once it starts.")
     progress: Progress | None = Field(

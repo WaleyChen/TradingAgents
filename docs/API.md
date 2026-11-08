@@ -140,6 +140,20 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
     { "ticker": "MU", "as_of": "2026-10-12", "decision": "Overweight", "target": 1100.0,
       "price_then": 950.1, "horizon": "3-6 months" }
   ],
+  "revenue_breakdown": {
+    "ticker": "GOOG", "currency": "USD", "source": "financial_datasets", "as_of": "2026-11-04",
+    "fiscal_period": "Q3 2026", "period_end": "2026-09-30", "kind": "standalone",
+    "total_revenue": 100000000000, "prior_year_total": 80000000000,
+    "views": [{ "dimension": "product", "segments": [
+      { "name": "Search & other", "revenue": 50000000000, "prior_year_revenue": 45000000000,
+        "includes": "Search and ads on other Google properties" },
+      { "name": "Cloud", "revenue": 25000000000, "prior_year_revenue": 12000000000 },
+      { "name": "YouTube ads", "revenue": 10000000000, "prior_year_revenue": 9000000000 },
+      { "name": "Network", "revenue": 8000000000, "prior_year_revenue": 8000000000 },
+      { "name": "Other Bets", "revenue": 1000000000 },
+      { "name": "Hedging gains", "revenue": 6000000000, "prior_year_revenue": 6000000000 }] }],
+    "footnotes": ["Workspace revenue is reported inside Cloud."]
+  },
   "earnings_release": {
     "ticker": "ISRG", "source": "sec_edgar", "form": "8-K", "filed_on": "2026-10-20", "period_end": "2026-09-30",
     "accession": "0001035267-26-000067",
@@ -221,6 +235,19 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   is `sec_edgar`, and `form` is `8-K` or `6-K`. A release filed more than 130 days before the run date means a
   newer one was missed (`release_stale`); text that still has HTML tags is refused (`text_not_plain`). This
   step runs by default; `TRADINGAGENTS_RELEASE_NOTES=0` turns it off.
+- `revenue_breakdown` is where one period's revenue came from, cut up to three ways (`views`; each
+  `dimension` is `product`, `segment` or `geography`). Each bucket carries `revenue` and, if the company
+  gives it, `prior_year_revenue` (the same period a year earlier; `null` if not, never 0). Send the buckets
+  the company reports, including negative lines such as hedging or eliminations, so they add to
+  `total_revenue` within 1% (`revenue_breakdown_total`). The service works out each bucket's share of the
+  total and its growth in code and returns the table as `revenue_breakdown` on the job (see below), so you
+  can render it without asking a model. The fundamentals analyst reads it and is told to say which buckets
+  make up the business and which drives growth; the decision-makers read a one-line mix. It will not split a
+  bucket or estimate a product the company does not report on its own line (Workspace, Gemini, Waymo and
+  the like): put what the company says about that in `footnotes` (up to 5, 200 characters each). `includes`
+  and `footnotes` are passed on as unverified text. Bucket revenues, shares and growth can be cited in the
+  summary as verified figures. With `financials`, a total that differs by more than 1% from that period's
+  revenue is refused (`revenue_breakdown_vs_financials`).
 - `valuation_history` is the stock's P/E against its own past. `pe_ttm` is price over
   trailing-twelve-month EPS; the service's own `pe_latest_annual` is price over the latest fiscal
   year's diluted EPS. They are named apart and the agents are told never to mix them. The range
@@ -308,6 +335,9 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 | `trade_outside_window` / `trade_value_mismatch` | a trade falls outside its window, or its value is not shares times price |
 | `insider_count_mismatch` / `insider_net_mismatch` / `congress_count_mismatch` | counts or net value disagree with the listed trades |
 | `amount_range_inverted` | a Congress `amount_min` exceeds `amount_max` |
+| `revenue_breakdown_total` / `revenue_breakdown_prior_total` | a view's buckets do not add to the reported total, or its prior-year buckets to the prior-year total |
+| `revenue_breakdown_vs_financials` | the breakdown's total differs from the financials' revenue for the same period |
+| `segment_duplicate` / `breakdown_period_after_as_of` | a bucket name is repeated in a view, or the period ends after the data's date |
 | `valuation_range_inconsistent` / `percentile_inconsistent` | `pe_ttm` is unordered, outside its own range, or its percentile does not fit |
 | `label_inconsistent` | a Fear & Greed label does not fit its value |
 | `prior_after_run` / `prior_order` / `prior_target_inconsistent` | a previous report is not before the run, not newest first, or its target is on the wrong side of its price |
@@ -348,6 +378,22 @@ renamed field, a new required field, or a tighter rule. New optional fields, new
 and new enum values are additive and keep the version. `/health` lists the versions the
 service reads in `context_schema_versions`. The schema file is generated from the same
 models that validate requests, and a test fails if it is stale.
+
+### Revenue table
+
+When the request sent `context.revenue_breakdown`, every poll of the job carries the computed table, ready to
+render as a table or chart (it is there from `queued`, since it is worked out from the request):
+
+```json
+"revenue_breakdown": { "fiscal_period": "Q3 2026", "period_end": "2026-09-30", "source": "financial_datasets",
+  "total_revenue": 100000000000, "total_yoy_pct": 25.0, "footnotes": ["Workspace revenue is reported inside Cloud."],
+  "views": [{ "dimension": "product", "rows": [
+    { "name": "Cloud", "revenue": 25000000000, "share_pct": 25.0, "yoy_pct": 108.3, "includes": null }] }] }
+```
+
+`share_pct` is the bucket over `total_revenue`, so rows with negative lines (hedging) can add to a little
+over or under 100. `yoy_pct` is `null` when no year-ago figure was sent. It is `null` too when the year-ago
+figure is zero or negative, because growth from there is undefined.
 
 ### Progress, usage and restarts
 

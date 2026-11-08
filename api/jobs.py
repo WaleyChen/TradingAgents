@@ -29,7 +29,7 @@ from api.schemas import (
     Usage,
 )
 from api.service import AnalysisResult, run_analysis
-from tradingagents.context import context_digest
+from tradingagents.context import context_digest, derive_revenue_breakdown
 from tradingagents.rating_label import plain_rating
 
 logger = logging.getLogger(__name__)
@@ -84,6 +84,10 @@ class AnalysisJob:
         return Usage(stages={stage: StageUsage(**u) for stage, u in self.usage.items()},
                      total_cost_usd=round(sum(costs), 4) if all(c is not None for c in costs) else None)
 
+    def _revenue_breakdown(self) -> dict | None:
+        context = self.request.context
+        return derive_revenue_breakdown(context.revenue_breakdown) if context and context.revenue_breakdown else None
+
     def to_response(self) -> AnalysisJobResponse:
         plain = plain_rating(self.decision)
         return AnalysisJobResponse(
@@ -104,6 +108,7 @@ class AnalysisJob:
             summary_figures=self.summary_figures,
             summary_problems=self.summary_problems,
             glossary=self.summary_glossary,
+            revenue_breakdown=self._revenue_breakdown(),
             queue=self._queue(),
             progress=self._progress(),
             usage=self._usage(),

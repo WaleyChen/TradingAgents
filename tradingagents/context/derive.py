@@ -12,6 +12,7 @@ from tradingagents.context.models import (
     Ownership,
     Price,
     PriorReport,
+    RevenueBreakdown,
     Technicals,
 )
 
@@ -168,3 +169,22 @@ def derive_prior_reports(reports: list[PriorReport], current_price: float | None
                 row["progress_pct"] = max(progress, 0.0) * 100
         rows.append(row)
     return rows
+
+
+def _growth_pct(now: float, before: float | None) -> float | None:
+    """Growth over a year ago; undefined (not infinite, not 0) from a missing or nonpositive base."""
+    return None if before is None or before <= 0 else (now / before - 1) * 100
+
+
+def derive_revenue_breakdown(rb: RevenueBreakdown) -> dict:
+    """The table a reader sees: each bucket's share of the reported total and its growth, from the amounts."""
+    views = [{"dimension": view.dimension,
+              "rows": [{"name": " ".join(seg.name.split()), "revenue": seg.revenue,
+                        "share_pct": seg.revenue / rb.total_revenue * 100,
+                        "yoy_pct": _growth_pct(seg.revenue, seg.prior_year_revenue),
+                        "includes": " ".join(seg.includes.split()) if seg.includes else None}
+                       for seg in view.segments]}
+             for view in rb.views]
+    return {"fiscal_period": rb.fiscal_period, "period_end": rb.period_end, "source": rb.source,
+            "total_revenue": rb.total_revenue, "total_yoy_pct": _growth_pct(rb.total_revenue, rb.prior_year_total),
+            "views": views, "footnotes": [" ".join(f.split()) for f in rb.footnotes]}

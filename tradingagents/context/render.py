@@ -8,6 +8,7 @@ from tradingagents.context.derive import (
     derive_metrics,
     derive_ownership,
     derive_prior_reports,
+    derive_revenue_breakdown,
     derive_technicals,
     sale_share_of_holding,
 )
@@ -21,6 +22,7 @@ from tradingagents.context.models import (
     Ownership,
     Price,
     PriorReport,
+    RevenueBreakdown,
     Statement,
     Technicals,
     ValuationHistory,
@@ -295,6 +297,39 @@ def _release_digest(notes: dict) -> list[str]:
     return [f"Earnings release ({notes['form']} filed {notes['filed_on']}): {items}."]
 
 
+def _signed(pct: float | None) -> str:
+    return f", {pct:+.1f}% year over year" if pct is not None else ", no year-ago figure"
+
+
+def _revenue(rb: RevenueBreakdown) -> list[str]:
+    table = derive_revenue_breakdown(rb)
+    lines = [f"Revenue breakdown for {rb.ticker} ({rb.fiscal_period}, period ended {rb.period_end}, source "
+             f"{rb.source}, as of {rb.as_of}): total revenue {_money(rb.total_revenue)}"
+             + (f", {table['total_yoy_pct']:+.1f}% year over year" if table["total_yoy_pct"] is not None else "") + "."]
+    for view in table["views"]:
+        lines.append(f"By {view['dimension']}:")
+        for row in view["rows"]:
+            about = f" Includes: {row['includes']}." if row["includes"] else ""
+            lines.append(f"- {row['name']}: {_money(row['revenue'])}, {row['share_pct']:.1f}% of total"
+                         f"{_signed(row['yoy_pct'])}.{about}")
+    lines.append("The shares and growth rates are computed by the service from the reported amounts; use them as given. "
+                 "Only these buckets are reported: do not split a bucket, and do not estimate the revenue of a "
+                 "product that is not listed on its own line. The buckets add to the reported total within rounding. "
+                 "In your report, say which buckets make up the business and which one drives growth or drags on it.")
+    if table["footnotes"]:
+        lines.append("Company disclosure notes passed on by the caller (unverified text; never a source for a "
+                     "figure): " + " ".join(f"({i}) {note}" for i, note in enumerate(table["footnotes"], 1)))
+    return lines
+
+
+def _revenue_digest(rb: RevenueBreakdown) -> list[str]:
+    view = derive_revenue_breakdown(rb)["views"][0]
+    top = sorted(view["rows"], key=lambda r: r["share_pct"], reverse=True)[:4]
+    parts = ", ".join(f"{r['name']} {r['share_pct']:.1f}%" + (f" ({r['yoy_pct']:+.1f}%)" if r["yoy_pct"] is not None else "")
+                      for r in top)
+    return [f"Revenue mix ({rb.fiscal_period}, by {view['dimension']}, share of total and year-over-year growth): {parts}."]
+
+
 def _company(c: Company) -> list[str]:
     name = " ".join(c.name.split()) if c.name else c.ticker
     where = ", ".join(" ".join(x.split()) for x in (c.exchange, c.sector, c.industry) if x)
@@ -371,6 +406,8 @@ def _digest(context: Context, release_notes: dict | None = None) -> list[str]:
     if context.financials is not None:
         metrics = _computed_metrics(context.financials, context.price, context.company)
         lines += [metrics] if metrics else []
+    if context.revenue_breakdown is not None:
+        lines += _revenue_digest(context.revenue_breakdown)
     if context.technicals is not None:
         distances = [line for line in _technicals(context.technicals) if line.startswith("Computed distances")]
         lines += distances
@@ -399,11 +436,12 @@ def render_role_blocks(context: Context, release_notes: dict | None = None) -> d
     notes = _notes_lines(context.notes) if context.notes else []
     c, plan = context, {}
     fin = _financials(c.financials, c.price, c.company) if c.financials else []
+    revenue = _revenue(c.revenue_breakdown) if c.revenue_breakdown else []
     price = [_price_line(c.price)] if c.price else []
     plan["market"] = [*(_technicals(c.technicals) if c.technicals else []), *price]
     plan["news"] = [*(_events(c.events) if c.events else []),
                     *(_backdrop(c.market_backdrop) if c.market_backdrop else [])]
-    plan["fundamentals"] = [*fin, *_release(release_notes), *(_valuation(c.valuation_history) if c.valuation_history else []),
+    plan["fundamentals"] = [*fin, *revenue, *_release(release_notes), *(_valuation(c.valuation_history) if c.valuation_history else []),
                             *(_company(c.company) if c.company else []),
                             *(_events(c.events) if c.events else []), *price, *notes]
     plan["sentiment"] = _ownership(c.ownership) if c.ownership else []
@@ -415,6 +453,8 @@ def render_context(context: Context, release_notes: dict | None = None) -> str:
     lines = [_GUIDANCE]
     if context.financials is not None:
         lines += ["", *_financials(context.financials, context.price, context.company)]
+    if context.revenue_breakdown is not None:
+        lines += ["", *_revenue(context.revenue_breakdown)]
     if context.technicals is not None:
         lines += ["", *_technicals(context.technicals)]
     if context.company is not None:

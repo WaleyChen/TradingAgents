@@ -1657,6 +1657,195 @@
       "title": "Reading",
       "type": "object"
     },
+    "RevenueBreakdown": {
+      "additionalProperties": false,
+      "description": "Where one period's revenue came from. Shares and growth are computed here from these amounts.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "currency": {
+          "const": "USD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "fiscal_period": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Fiscal Period",
+          "type": "string"
+        },
+        "footnotes": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Footnotes",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "standalone",
+            "annual"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "period_end": {
+          "format": "date",
+          "title": "Period End",
+          "type": "string"
+        },
+        "prior_year_total": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prior Year Total"
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures",
+            "sec_edgar"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        },
+        "total_revenue": {
+          "exclusiveMaximum": 1000000000000000,
+          "exclusiveMinimum": 0,
+          "title": "Total Revenue",
+          "type": "integer"
+        },
+        "views": {
+          "items": {
+            "$ref": "#/$defs/RevenueView"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Views",
+          "type": "array"
+        }
+      },
+      "required": [
+        "ticker",
+        "currency",
+        "source",
+        "as_of",
+        "fiscal_period",
+        "period_end",
+        "kind",
+        "total_revenue",
+        "views"
+      ],
+      "title": "RevenueBreakdown",
+      "type": "object"
+    },
+    "RevenueView": {
+      "additionalProperties": false,
+      "description": "The whole of revenue cut one way. Buckets cover the total, so they add up to it.",
+      "properties": {
+        "dimension": {
+          "enum": [
+            "product",
+            "segment",
+            "geography"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "segments": {
+          "items": {
+            "$ref": "#/$defs/Segment"
+          },
+          "maxItems": 20,
+          "minItems": 2,
+          "title": "Segments",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dimension",
+        "segments"
+      ],
+      "title": "RevenueView",
+      "type": "object"
+    },
+    "Segment": {
+      "additionalProperties": false,
+      "description": "One bucket of revenue as the company reports it (a product line, a segment or a region).",
+      "properties": {
+        "includes": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Includes"
+        },
+        "name": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "prior_year_revenue": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1000000000000000,
+              "exclusiveMinimum": -1000000000000000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prior Year Revenue"
+        },
+        "revenue": {
+          "exclusiveMaximum": 1000000000000000,
+          "exclusiveMinimum": -1000000000000000,
+          "title": "Revenue",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "revenue"
+      ],
+      "title": "Segment",
+      "type": "object"
+    },
     "Statement": {
       "additionalProperties": false,
       "description": "Income and cash flow over one period; ``kind`` says how long it is.",
@@ -2112,6 +2301,17 @@
       "maxItems": 3,
       "title": "Prior Reports",
       "type": "array"
+    },
+    "revenue_breakdown": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RevenueBreakdown"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "schema_version": {
       "const": 1,
