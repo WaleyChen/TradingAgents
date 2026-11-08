@@ -1514,6 +1514,51 @@
       "title": "PeTtm",
       "type": "object"
     },
+    "Performance": {
+      "additionalProperties": false,
+      "description": "A comparison series (the market, a sector fund) and how it did over the same windows as the basket.",
+      "properties": {
+        "return_1m_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000.0,
+              "exclusiveMinimum": -100.01,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return 1M Pct"
+        },
+        "return_3m_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000.0,
+              "exclusiveMinimum": -100.01,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return 3M Pct"
+        },
+        "ticker": {
+          "maxLength": 32,
+          "minLength": 1,
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ticker"
+      ],
+      "title": "Performance",
+      "type": "object"
+    },
     "Price": {
       "additionalProperties": false,
       "description": "A verified closing price, so the service can derive valuation ratios.",
@@ -2130,6 +2175,194 @@
       "title": "Technicals",
       "type": "object"
     },
+    "ThemeBackdrop": {
+      "additionalProperties": false,
+      "description": "How a theme's basket of stocks is doing, measured by the caller on a fixed list from daily closes.\n\nThe distance from the high is from the 52-week closing high, not the intraday high. Positioning\n(leverage, crowding, short interest) is not part of this block and is never inferred from it.",
+      "properties": {
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "avg_drawdown_from_52w_close_high_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Avg Drawdown From 52W Close High Pct"
+        },
+        "basket": {
+          "items": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 40,
+          "minItems": 3,
+          "title": "Basket",
+          "type": "array"
+        },
+        "basket_size": {
+          "anyOf": [
+            {
+              "maximum": 40,
+              "minimum": 3,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Basket Size"
+        },
+        "basket_size_used": {
+          "maximum": 40,
+          "minimum": 1,
+          "title": "Basket Size Used",
+          "type": "integer"
+        },
+        "below_200d_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Below 200D Pct"
+        },
+        "below_50d_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Below 50D Pct"
+        },
+        "benchmark": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Performance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "put_call_ratio": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reading"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "return_1m_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000.0,
+              "exclusiveMinimum": -100.01,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return 1M Pct"
+        },
+        "return_3m_pct": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 10000.0,
+              "exclusiveMinimum": -100.01,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Return 3M Pct"
+        },
+        "rsi_below_30_pct": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rsi Below 30 Pct"
+        },
+        "sector_etf": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Performance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source": {
+          "enum": [
+            "sec_xbrl",
+            "financial_datasets",
+            "getmarketalerts",
+            "yahoo_finance",
+            "sec_13f",
+            "sec_form4",
+            "congress_disclosures",
+            "sec_edgar"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "as_of",
+        "basket",
+        "basket_size_used"
+      ],
+      "title": "ThemeBackdrop",
+      "type": "object"
+    },
     "ValuationHistory": {
       "additionalProperties": false,
       "description": "The stock's valuation against its own past.",
@@ -2323,6 +2556,17 @@
       "anyOf": [
         {
           "$ref": "#/$defs/Technicals"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "theme_backdrop": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ThemeBackdrop"
         },
         {
           "type": "null"

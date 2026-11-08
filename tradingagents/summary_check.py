@@ -21,6 +21,7 @@ from tradingagents.context.derive import (
     derive_ownership,
     derive_revenue_breakdown,
     derive_technicals,
+    derive_theme_backdrop,
     sale_share_of_holding,
 )
 from tradingagents.plan.check import Readings
@@ -189,6 +190,8 @@ def _market_values(context: Context) -> list[Known]:
         found += [Known("credit spread", "number", b.credit_spread_hy_bps.value, "context")] if b.credit_spread_hy_bps else []
     if context.revenue_breakdown is not None:
         found += _revenue_values(context.revenue_breakdown)
+    if context.theme_backdrop is not None:
+        found += _theme_values(context.theme_backdrop)
     for r in context.prior_reports:
         found += [Known("prior target", "usd", r.target, "context")] if r.target is not None else []
         found.append(Known("prior price", "usd", r.price_then, "context"))
@@ -206,6 +209,22 @@ def _revenue_values(rb) -> list[Known]:
             found.append(Known(f"{row['name']} share of revenue", "pct", row["share_pct"], "context"))
             if row["yoy_pct"] is not None:
                 found.append(Known(f"{row['name']} revenue growth", "pct", row["yoy_pct"], "context"))
+    return found
+
+
+def _theme_values(t) -> list[Known]:
+    """The basket's shares, returns and the gap to the market, plus how many washout signals are met."""
+    d = derive_theme_backdrop(t)
+    pcts = {"theme below 200-day share": t.below_200d_pct, "theme below 50-day share": t.below_50d_pct,
+            "theme oversold share": t.rsi_below_30_pct, "theme drawdown": t.avg_drawdown_from_52w_close_high_pct,
+            "theme 1-month return": t.return_1m_pct, "theme 3-month return": t.return_3m_pct,
+            "theme 1-month gap to market": d["relative_1m_pct"], "theme 3-month gap to market": d["relative_3m_pct"]}
+    for label, perf in (("market", t.benchmark), ("sector fund", t.sector_etf)):
+        if perf is not None:
+            pcts[f"{label} 1-month return"], pcts[f"{label} 3-month return"] = perf.return_1m_pct, perf.return_3m_pct
+    found = [Known(name, "pct", value, "context") for name, value in pcts.items() if value is not None]
+    found.append(Known("washout signals met", "number", float(d["signals_met"]), "context"))
+    found.append(Known("theme names measured", "number", float(d["basket_size_used"]), "context"))
     return found
 
 

@@ -179,6 +179,29 @@ class RevenueTable(BaseModel):
     footnotes: list[str] = Field(description="The company's own disclosure notes, as sent by the caller.")
 
 
+class ThemeSignal(BaseModel):
+    name: str
+    met: bool
+    value: float
+    threshold: float
+    direction: Literal["at least", "at most"]
+
+
+class ThemeTable(BaseModel):
+    name: str
+    as_of: date
+    basket_size: int = Field(description="Names on the fixed list.")
+    basket_size_used: int = Field(description="Names with enough history to be measured.")
+    names_below_200d: int | None = None
+    names_below_50d: int | None = None
+    names_rsi_below_30: int | None = None
+    relative_1m_pct: float | None = Field(default=None, description="Basket return minus the market's, in points.")
+    relative_3m_pct: float | None = None
+    signals_met: int = Field(description="Washout signals met, counted by the service from fixed thresholds.")
+    signals_measured: int
+    signals: list[ThemeSignal]
+
+
 class AnalysisJobResponse(BaseModel):
     id: str
     status: JobStatus
@@ -220,6 +243,10 @@ class AnalysisJobResponse(BaseModel):
         description="Revenue by product, segment or region for the latest period, with each bucket's share of the "
                     "total and its growth, computed from the request's context.revenue_breakdown; null when none was sent. "
                     "Render it as a table or chart.")
+    theme_backdrop: ThemeTable | None = Field(
+        default=None,
+        description="How many washout signals the theme's basket meets, with each signal's value and threshold, "
+                    "computed from the request's context.theme_backdrop; null when none was sent.")
     queue: QueueInfo | None = Field(
         default=None, description="Present while the job is waiting for a free worker; null once it starts.")
     progress: Progress | None = Field(

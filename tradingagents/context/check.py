@@ -26,6 +26,7 @@ from tradingagents.context.models import (
     RevenueBreakdown,
     Statement,
     Technicals,
+    ThemeBackdrop,
     ValuationHistory,
 )
 
@@ -473,6 +474,33 @@ def check_revenue_breakdown(rb: RevenueBreakdown, financials: Financials | None)
     return found
 
 
+_SHARE_TOLERANCE = 0.5     # points: callers may round a share to a whole percent
+
+
+def check_theme_backdrop(t: ThemeBackdrop, trade_date: date | None) -> list[Problem]:
+    found, seen = [], set()
+    for i, ticker in enumerate(t.basket):
+        if ticker in seen:
+            found.append(Problem("basket_duplicate", f"theme_backdrop.basket[{i}]", f"{ticker} is listed twice"))
+        seen.add(ticker)
+    if t.basket_size is not None and t.basket_size != len(t.basket):
+        found.append(Problem("basket_size_inconsistent", "theme_backdrop.basket_size",
+                             f"basket_size is {t.basket_size}, but {len(t.basket)} tickers are listed"))
+    if t.basket_size_used > len(t.basket):
+        found.append(Problem("basket_size_inconsistent", "theme_backdrop.basket_size_used",
+                             f"{t.basket_size_used} names measured, but only {len(t.basket)} are listed"))
+    used = t.basket_size_used
+    for name in ("below_200d_pct", "below_50d_pct", "rsi_below_30_pct"):
+        pct = getattr(t, name)
+        if pct is not None and abs(pct - round(pct * used / 100) / used * 100) > _SHARE_TOLERANCE:
+            found.append(Problem("share_not_whole_names", f"theme_backdrop.{name}",
+                                 f"{pct}% cannot be a share of {used} names: it is not a whole number of them"))
+    if trade_date is not None and (trade_date - t.as_of).days > _PRICE_WINDOW_DAYS:
+        found.append(Problem("theme_backdrop_stale", "theme_backdrop.as_of",
+                             f"the basket is dated {t.as_of}, more than {_PRICE_WINDOW_DAYS} days before the run date {trade_date}"))
+    return found
+
+
 def check_context(context: Context, *, ticker: str | None = None, trade_date: date | None = None) -> list[Problem]:
     """Every problem with the context, including ties to the request when it is given."""
     found = []
@@ -498,6 +526,8 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
         found += check_backdrop(context.market_backdrop)
     if context.revenue_breakdown is not None:
         found += check_revenue_breakdown(context.revenue_breakdown, context.financials)
+    if context.theme_backdrop is not None:
+        found += check_theme_backdrop(context.theme_backdrop, trade_date)
     found += check_prior_reports(context.prior_reports, trade_date)
     if ticker is not None:
         found += [Problem("ticker_mismatch", f"prior_reports[{i}].ticker",
@@ -517,7 +547,8 @@ def check_context(context: Context, *, ticker: str | None = None, trade_date: da
             found += check_price(context.price, trade_date)
         for name, block in (("valuation_history", context.valuation_history),
                             ("market_backdrop", context.market_backdrop),
-                            ("revenue_breakdown", context.revenue_breakdown)):
+                            ("revenue_breakdown", context.revenue_breakdown),
+                            ("theme_backdrop", context.theme_backdrop)):
             if block is not None and block.as_of > trade_date:
                 found.append(Problem("as_of_after_trade_date", f"{name}.as_of",
                                      f"the {name.replace('_', ' ')} is dated {block.as_of}, after the run date {trade_date}"))

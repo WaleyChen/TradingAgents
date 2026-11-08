@@ -314,6 +314,47 @@ class MarketBackdrop(_Strict):
     credit_spread_hy_bps: Reading | None = None
 
 
+Pct = Annotated[float | None, Field(default=None, ge=0, le=100)]
+Move = Annotated[float | None, Field(default=None, gt=-100.01, lt=1e4)]
+
+
+class Performance(_Strict):
+    """A comparison series (the market, a sector fund) and how it did over the same windows as the basket."""
+
+    ticker: Ticker
+    return_1m_pct: Move
+    return_3m_pct: Move
+
+
+class ThemeBackdrop(_Strict):
+    """How a theme's basket of stocks is doing, measured by the caller on a fixed list from daily closes.
+
+    The distance from the high is from the 52-week closing high, not the intraday high. Positioning
+    (leverage, crowding, short interest) is not part of this block and is never inferred from it.
+    """
+
+    name: Annotated[str, Field(min_length=1, max_length=60)]
+    source: Source
+    as_of: date       # the oldest latest-close date among the names measured
+    basket: list[Ticker] = Field(min_length=3, max_length=40)
+    basket_size: Annotated[int, Field(ge=3, le=40)] | None = None    # the caller's own count of the list, checked
+    basket_size_used: Annotated[int, Field(ge=1, le=40)]    # names with enough history to measure
+    below_200d_pct: Pct
+    below_50d_pct: Pct
+    rsi_below_30_pct: Pct
+    avg_drawdown_from_52w_close_high_pct: Pct
+    return_1m_pct: Move       # equal-weight basket return
+    return_3m_pct: Move
+    benchmark: Performance | None = None
+    sector_etf: Performance | None = None
+    put_call_ratio: Reading | None = None    # market-wide, not per stock
+
+    @field_validator("basket")
+    @classmethod
+    def _tickers(cls, value: list[str]) -> list[str]:
+        return [t.strip().upper() for t in value]
+
+
 class PriorReport(_Company):
     """One of our own earlier reports on this company."""
 
@@ -389,5 +430,6 @@ class Context(_Strict):
     prior_reports: list[PriorReport] = Field(default_factory=list, max_length=3)
     earnings_release: EarningsRelease | None = None
     revenue_breakdown: RevenueBreakdown | None = None
+    theme_backdrop: ThemeBackdrop | None = None
     notes: str | None = Field(default=None, max_length=MAX_NOTES,
                               description="Free text. Unverified: context only, never a source for a figure.")

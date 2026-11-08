@@ -154,6 +154,18 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
       { "name": "Hedging gains", "revenue": 6000000000, "prior_year_revenue": 6000000000 }] }],
     "footnotes": ["Workspace revenue is reported inside Cloud."]
   },
+  "theme_backdrop": {
+    "name": "AI & semis", "source": "getmarketalerts", "as_of": "2026-11-06",
+    "basket": ["NVDA", "AVGO", "AMD", "TSM", "ASML", "MU", "MRVL", "ARM", "AMAT", "LRCX", "KLAC", "SMCI", "PLTR",
+               "MSFT", "GOOGL", "META", "AMZN", "ORCL"],
+    "basket_size": 18, "basket_size_used": 18,
+    "below_200d_pct": 77.8, "below_50d_pct": 88.9, "rsi_below_30_pct": 33.3,
+    "avg_drawdown_from_52w_close_high_pct": 31.5,
+    "return_1m_pct": -14.2, "return_3m_pct": -9.0,
+    "benchmark": { "ticker": "SPY", "return_1m_pct": -2.1, "return_3m_pct": 3.4 },
+    "sector_etf": { "ticker": "SMH", "return_1m_pct": -16.0, "return_3m_pct": -8.5 },
+    "put_call_ratio": { "value": 1.1, "as_of": "2026-11-06" }
+  },
   "earnings_release": {
     "ticker": "ISRG", "source": "sec_edgar", "form": "8-K", "filed_on": "2026-10-20", "period_end": "2026-09-30",
     "accession": "0001035267-26-000067",
@@ -248,6 +260,25 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
   and `footnotes` are passed on as unverified text. Bucket revenues, shares and growth can be cited in the
   summary as verified figures. With `financials`, a total that differs by more than 1% from that period's
   revenue is refused (`revenue_breakdown_vs_financials`).
+- `theme_backdrop` says how a theme's basket of stocks is doing, so one stock's chart can be read against
+  it ("AI & semis" is weak across the board, or only this name is). The caller owns the basket: a fixed list of
+  3 to 40 tickers, never tuned per request. Send the measures you can compute from daily closes; each is
+  optional and `null` means unknown (never 0): `below_200d_pct`, `below_50d_pct`, `rsi_below_30_pct` (shares of
+  the basket, 0-100), `avg_drawdown_from_52w_close_high_pct` (from the 52-week CLOSING high, not the intraday
+  high; a positive number), the equal-weight `return_1m_pct` and `return_3m_pct`, and the same two returns for
+  `benchmark` (the market, e.g. SPY) and `sector_etf` (e.g. SMH). `put_call_ratio` is a market-wide value, not
+  per stock. `basket_size` (optional) is your own count of the list and must equal it. `basket_size_used` is how many
+  listed names had enough history to measure; count every share on those same names, because each share must be a
+  whole number of them (`share_not_whole_names`, within 0.5 points of rounding), and `as_of` is the
+  OLDEST latest-close date among them (more than 7 days before the run is `theme_backdrop_stale`). There is
+  no per-stock positioning here: leverage, crowding, short interest and fund flows are not measured, and the
+  agents are told never to claim anything about them. The service counts in code how many of five washout
+  signals are met, from fixed thresholds: at least 70% of the basket below its 200-day average, at least 30%
+  with RSI under 30, an average drawdown of at least 25%, a basket return of -10% or worse over a month, and
+  trailing the market by 8 points or more over a month. A signal with no input is "not measured", never
+  "met". The market analyst reads the block and the decision-makers a one-line digest. They may call the theme
+  washed out or capitulated only if at least 3 signals are met, naming each figure; even then it is not a buy
+  signal. The shares, returns and signal count can be cited in the summary as verified figures.
 - `valuation_history` is the stock's P/E against its own past. `pe_ttm` is price over
   trailing-twelve-month EPS; the service's own `pe_latest_annual` is price over the latest fiscal
   year's diluted EPS. They are named apart and the agents are told never to mix them. The range
@@ -338,6 +369,9 @@ Only the blocks below are accepted; anything else (`technicals`, `instructions`,
 | `revenue_breakdown_total` / `revenue_breakdown_prior_total` | a view's buckets do not add to the reported total, or its prior-year buckets to the prior-year total |
 | `revenue_breakdown_vs_financials` | the breakdown's total differs from the financials' revenue for the same period |
 | `segment_duplicate` / `breakdown_period_after_as_of` | a bucket name is repeated in a view, or the period ends after the data's date |
+| `basket_duplicate` / `basket_size_inconsistent` | a ticker is listed twice in the basket, or more names were measured than are listed |
+| `share_not_whole_names` | a basket share is not a whole number of the names measured |
+| `theme_backdrop_stale` | the basket is dated more than 7 days before the run date |
 | `valuation_range_inconsistent` / `percentile_inconsistent` | `pe_ttm` is unordered, outside its own range, or its percentile does not fit |
 | `label_inconsistent` | a Fear & Greed label does not fit its value |
 | `prior_after_run` / `prior_order` / `prior_target_inconsistent` | a previous report is not before the run, not newest first, or its target is on the wrong side of its price |
@@ -394,6 +428,22 @@ render as a table or chart (it is there from `queued`, since it is worked out fr
 `share_pct` is the bucket over `total_revenue`, so rows with negative lines (hedging) can add to a little
 over or under 100. `yoy_pct` is `null` when no year-ago figure was sent. It is `null` too when the year-ago
 figure is zero or negative, because growth from there is undefined.
+
+### Theme signals
+
+When the request sent `context.theme_backdrop`, every poll of the job carries the signal count, counted by the
+service (it is there from `queued`):
+
+```json
+"theme_backdrop": { "name": "AI & semis", "as_of": "2026-11-06", "basket_size": 18, "basket_size_used": 18,
+  "names_below_200d": 14, "names_below_50d": 16, "names_rsi_below_30": 6,
+  "relative_1m_pct": -12.1, "relative_3m_pct": -12.4, "signals_met": 5, "signals_measured": 5,
+  "signals": [{ "name": "most of the basket is below its 200-day average", "met": true, "value": 77.8,
+                "threshold": 70.0, "direction": "at least" }] }
+```
+
+`signals_measured` counts only the signals whose inputs were sent. `relative_*` is the basket's return minus
+the market's, in points, and is `null` without a `benchmark`.
 
 ### Progress, usage and restarts
 

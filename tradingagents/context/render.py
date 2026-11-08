@@ -5,11 +5,13 @@ from __future__ import annotations
 import re
 
 from tradingagents.context.derive import (
+    WASHOUT_MIN_SIGNALS,
     derive_metrics,
     derive_ownership,
     derive_prior_reports,
     derive_revenue_breakdown,
     derive_technicals,
+    derive_theme_backdrop,
     sale_share_of_holding,
 )
 from tradingagents.context.models import (
@@ -25,6 +27,7 @@ from tradingagents.context.models import (
     RevenueBreakdown,
     Statement,
     Technicals,
+    ThemeBackdrop,
     ValuationHistory,
 )
 
@@ -330,6 +333,69 @@ def _revenue_digest(rb: RevenueBreakdown) -> list[str]:
     return [f"Revenue mix ({rb.fiscal_period}, by {view['dimension']}, share of total and year-over-year growth): {parts}."]
 
 
+def _points(gap: float | None, window: str) -> str:
+    if gap is None:
+        return ""
+    return f"{abs(gap):.1f} points {'ahead of' if gap >= 0 else 'behind'} the market over {window}"
+
+
+def _theme(t: ThemeBackdrop) -> list[str]:
+    d = derive_theme_backdrop(t)
+    size, used = d["basket_size"], d["basket_size_used"]
+    listed = ", ".join(t.basket)
+    measured = (f"Measured on all {size} names of a fixed list ({listed})." if used == size else
+                f"Measured on {used} of the {size} names on a fixed list ({listed}); the rest lacked price history.")
+    lines = [f"Theme backdrop: {t.name} (source {t.source}, as of {t.as_of}). {measured}"]
+    shares = [f"{label} {d[key]} of {used} ({pct:g}%)" for label, key, pct in
+              (("below their 200-day average:", "names_below_200d", t.below_200d_pct),
+               ("below their 50-day average:", "names_below_50d", t.below_50d_pct),
+               ("with RSI under 30:", "names_rsi_below_30", t.rsi_below_30_pct)) if pct is not None]
+    if t.avg_drawdown_from_52w_close_high_pct is not None:
+        shares.append(f"average distance below the 52-week closing high {t.avg_drawdown_from_52w_close_high_pct:g}%")
+    if shares:
+        lines.append("; ".join(shares).capitalize() + ".")
+    moves = []
+    if t.return_1m_pct is not None or t.return_3m_pct is not None:
+        gaps = ", ".join(g for g in (_points(d["relative_1m_pct"], "1 month"), _points(d["relative_3m_pct"], "3 months")) if g)
+        text = "Equal-weight basket return: " + " and ".join(
+            f"{v:+.1f}% over {w}" for v, w in ((t.return_1m_pct, "1 month"), (t.return_3m_pct, "3 months")) if v is not None)
+        moves.append(text + (f" ({gaps})" if gaps else ""))
+    for label, perf in (("market", t.benchmark), ("sector fund", t.sector_etf)):
+        if perf is not None:
+            moves.append(f"{label} {perf.ticker}: " + " and ".join(
+                f"{v:+.1f}% over {w}" for v, w in ((perf.return_1m_pct, "1 month"), (perf.return_3m_pct, "3 months"))
+                if v is not None))
+    if t.put_call_ratio is not None:
+        moves.append(f"market-wide equity put/call {t.put_call_ratio.value:g} (as of {t.put_call_ratio.as_of})")
+    lines += ["; ".join(moves) + "."] if moves else []
+    if d["signals"]:
+        lines.append(f"Washout signals met (the service's fixed thresholds): {d['signals_met']} of {d['signals_measured']} measured.")
+        lines += [f"- {s['name']}: {'yes' if s['met'] else 'no'} ({s['value']:+.1f} against {s['threshold']:g})"
+                  for s in d["signals"]]
+    lines.append(
+        "This describes how the theme is doing, not this company; say whether this stock's weakness is the "
+        "theme's or its own. Call the theme washed out, capitulated or oversold only if at least "
+        f"{WASHOUT_MIN_SIGNALS} of the signals above are met, naming each figure and its date; with fewer, say it is "
+        "weak or mixed and that a washout is not shown. Even a washout is not a buy signal: selling can continue. "
+        "The drawdown is from the closing high, not the intraday high. Positioning (hedge-fund leverage, crowding, "
+        "short interest, fund flows) is not measured here: never claim anything about it.")
+    return lines
+
+
+def _theme_digest(t: ThemeBackdrop) -> list[str]:
+    d = derive_theme_backdrop(t)
+    parts = [f"washout signals met {d['signals_met']} of {d['signals_measured']} measured"] if d["signals"] else []
+    if d["names_below_200d"] is not None:
+        parts.append(f"{d['names_below_200d']} of {d['basket_size_used']} names below the 200-day average")
+    if t.return_1m_pct is not None:
+        parts.append(f"basket {t.return_1m_pct:+.1f}% over 1 month"
+                     + (f" against the market's {t.benchmark.return_1m_pct:+.1f}%" if t.benchmark and t.benchmark.return_1m_pct is not None else ""))
+    if not parts:
+        return []
+    return [f"Theme backdrop ({t.name}, as of {t.as_of}): " + "; ".join(parts) + f". Call it a washout only if at least "
+            f"{WASHOUT_MIN_SIGNALS} signals are met; positioning is not measured."]
+
+
 def _company(c: Company) -> list[str]:
     name = " ".join(c.name.split()) if c.name else c.ticker
     where = ", ".join(" ".join(x.split()) for x in (c.exchange, c.sector, c.industry) if x)
@@ -408,6 +474,8 @@ def _digest(context: Context, release_notes: dict | None = None) -> list[str]:
         lines += [metrics] if metrics else []
     if context.revenue_breakdown is not None:
         lines += _revenue_digest(context.revenue_breakdown)
+    if context.theme_backdrop is not None:
+        lines += _theme_digest(context.theme_backdrop)
     if context.technicals is not None:
         distances = [line for line in _technicals(context.technicals) if line.startswith("Computed distances")]
         lines += distances
@@ -438,7 +506,8 @@ def render_role_blocks(context: Context, release_notes: dict | None = None) -> d
     fin = _financials(c.financials, c.price, c.company) if c.financials else []
     revenue = _revenue(c.revenue_breakdown) if c.revenue_breakdown else []
     price = [_price_line(c.price)] if c.price else []
-    plan["market"] = [*(_technicals(c.technicals) if c.technicals else []), *price]
+    plan["market"] = [*(_technicals(c.technicals) if c.technicals else []), *price,
+                      *(_theme(c.theme_backdrop) if c.theme_backdrop else [])]
     plan["news"] = [*(_events(c.events) if c.events else []),
                     *(_backdrop(c.market_backdrop) if c.market_backdrop else [])]
     plan["fundamentals"] = [*fin, *revenue, *_release(release_notes), *(_valuation(c.valuation_history) if c.valuation_history else []),
@@ -467,6 +536,8 @@ def render_context(context: Context, release_notes: dict | None = None) -> str:
         lines += ["", *_valuation(context.valuation_history)]
     if context.market_backdrop is not None and _backdrop(context.market_backdrop):
         lines += ["", *_backdrop(context.market_backdrop)]
+    if context.theme_backdrop is not None:
+        lines += ["", *_theme(context.theme_backdrop)]
     if context.events is not None:
         lines += ["", *_events(context.events)]
     if context.price is not None:

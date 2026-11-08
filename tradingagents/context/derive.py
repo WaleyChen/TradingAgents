@@ -14,6 +14,7 @@ from tradingagents.context.models import (
     PriorReport,
     RevenueBreakdown,
     Technicals,
+    ThemeBackdrop,
 )
 
 
@@ -188,3 +189,41 @@ def derive_revenue_breakdown(rb: RevenueBreakdown) -> dict:
     return {"fiscal_period": rb.fiscal_period, "period_end": rb.period_end, "source": rb.source,
             "total_revenue": rb.total_revenue, "total_yoy_pct": _growth_pct(rb.total_revenue, rb.prior_year_total),
             "views": views, "footnotes": [" ".join(f.split()) for f in rb.footnotes]}
+
+
+# A washout is called only when several of these agree. The thresholds are fixed here, not chosen per request.
+WASHOUT_MIN_SIGNALS = 3
+_WASHOUT = (
+    ("below_200d_pct", 70.0, "at least", "most of the basket is below its 200-day average"),
+    ("rsi_below_30_pct", 30.0, "at least", "a large share of the basket is oversold (RSI under 30)"),
+    ("avg_drawdown_from_52w_close_high_pct", 25.0, "at least", "the basket is far below its 52-week closing highs"),
+    ("return_1m_pct", -10.0, "at most", "the basket fell sharply over the last month"),
+    ("relative_1m_pct", -8.0, "at most", "the basket trails the market badly over the last month"),
+)
+
+
+def _names(pct: float | None, used: int) -> int | None:
+    return None if pct is None else round(pct * used / 100)
+
+
+def _relative(basket: float | None, benchmark: float | None) -> float | None:
+    return None if basket is None or benchmark is None else basket - benchmark
+
+
+def derive_theme_backdrop(t: ThemeBackdrop) -> dict:
+    """Names counted from the shares, the gap to the market, and which washout signals are met, in code."""
+    bench = t.benchmark
+    out = {"name": t.name, "as_of": t.as_of, "basket_size": len(t.basket), "basket_size_used": t.basket_size_used,
+           "names_below_200d": _names(t.below_200d_pct, t.basket_size_used),
+           "names_below_50d": _names(t.below_50d_pct, t.basket_size_used),
+           "names_rsi_below_30": _names(t.rsi_below_30_pct, t.basket_size_used),
+           "relative_1m_pct": _relative(t.return_1m_pct, bench.return_1m_pct if bench else None),
+           "relative_3m_pct": _relative(t.return_3m_pct, bench.return_3m_pct if bench else None)}
+    values = {**t.model_dump(), **out}
+    signals = []
+    for key, threshold, direction, label in _WASHOUT:
+        value = values.get(key)
+        if value is not None:
+            met = value >= threshold if direction == "at least" else value <= threshold
+            signals.append({"name": label, "met": met, "value": value, "threshold": threshold, "direction": direction})
+    return {**out, "signals": signals, "signals_met": sum(s["met"] for s in signals), "signals_measured": len(signals)}
